@@ -28,6 +28,7 @@ export default function Todo({ tasks, onToggleTask, onToggleSubTask, onAddTask, 
           icon={SCOPE_LABELS[scope].icon}
           scope={scope}
           tasks={grouped[scope]}
+          allTasks={tasks}
           onToggleTask={onToggleTask}
           onToggleSubTask={onToggleSubTask}
           onAddTask={onAddTask}

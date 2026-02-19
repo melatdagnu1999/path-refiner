@@ -28,6 +28,10 @@ export interface Task {
   dueDate: Date;
   notes?: string;
   progress?: number;
+  startTime?: string;    // e.g. "06:30"
+  endTime?: string;      // e.g. "07:00"
+  timeSpent?: number;    // minutes actually spent
+  timerDuration?: number; // countdown target in minutes
 }
 
 export interface WeeklyPlan {

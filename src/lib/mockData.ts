@@ -163,6 +163,7 @@ export const mockTasks: Task[] = [
   {
     id: 'd1', title: 'Morning devotional', category: 'church', priority: 'high',
     completed: false, scope: 'day', dueDate: new Date(),
+    startTime: '06:30', endTime: '07:00', timerDuration: 30,
     subTasks: [
       { id: 'ds1', title: 'Read Psalm 23', completed: false },
       { id: 'ds2', title: 'Journal reflection', completed: false }
@@ -171,6 +172,7 @@ export const mockTasks: Task[] = [
   {
     id: 'd2', title: 'Study for midterm', category: 'class', priority: 'high',
     completed: false, scope: 'day', dueDate: new Date(),
+    startTime: '08:00', endTime: '10:00', timerDuration: 90,
     subTasks: [
       { id: 'ds3', title: 'Review chapters 1-3', completed: false },
       { id: 'ds4', title: 'Practice problems', completed: false }
@@ -178,10 +180,14 @@ export const mockTasks: Task[] = [
   },
   {
     id: 'd3', title: 'Gym workout', category: 'self-care', priority: 'medium',
-    completed: false, scope: 'day', dueDate: new Date(), subTasks: []
+    completed: false, scope: 'day', dueDate: new Date(),
+    startTime: '10:30', endTime: '11:30', timerDuration: 60,
+    subTasks: []
   },
   {
     id: 'd4', title: 'Reply to recruiter email', category: 'career', priority: 'high',
-    completed: false, scope: 'day', dueDate: new Date(), subTasks: []
+    completed: false, scope: 'day', dueDate: new Date(),
+    startTime: '14:00', endTime: '14:30', timerDuration: 25,
+    subTasks: []
   },
 ];
