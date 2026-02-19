@@ -17,7 +17,7 @@ export function WeeklyCalendar({ weekStart, tasks, onToggleTask, onToggleSubTask
     return tasks.filter(task => {
       const taskDate = format(task.dueDate, 'yyyy-MM-dd');
       const dayDate = format(day, 'yyyy-MM-dd');
-      return taskDate === dayDate && task.category === category;
+      return task.scope === 'week' && taskDate === dayDate && task.category === category;
     });
   };
 

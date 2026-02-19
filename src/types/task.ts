@@ -8,6 +8,8 @@ export type Category =
   | 'skill' 
   | 'relationship';
 
+export type TaskScope = 'year' | 'month' | 'week' | 'day';
+
 export interface SubTask {
   id: string;
   title: string;
@@ -20,9 +22,12 @@ export interface Task {
   category: Category;
   priority: 'low' | 'medium' | 'high';
   completed: boolean;
+  scope: TaskScope;
+  parentId?: string;
   subTasks: SubTask[];
   dueDate: Date;
   notes?: string;
+  progress?: number;
 }
 
 export interface WeeklyPlan {
@@ -40,4 +45,11 @@ export const CATEGORIES: Record<Category, { label: string; icon: string; color: 
   'self-care': { label: 'Self-care', icon: '🌿', color: 'hsl(150 50% 55%)' },
   'skill': { label: 'Skill', icon: '🛠️', color: 'hsl(30 70% 60%)' },
   'relationship': { label: 'Relationship', icon: '💝', color: 'hsl(15 80% 70%)' }
+};
+
+export const SCOPE_LABELS: Record<TaskScope, { label: string; icon: string }> = {
+  'year': { label: 'Yearly', icon: '🗓️' },
+  'month': { label: 'Monthly', icon: '📅' },
+  'week': { label: 'Weekly', icon: '📆' },
+  'day': { label: 'Daily', icon: '📋' },
 };
