@@ -50,7 +50,14 @@ const Index = () => {
   };
 
   const handleDeleteTask = (taskId: string) => {
-    setTasks(tasks.filter(t => t.id !== taskId));
+    // Also delete all descendants
+    const toDelete = new Set<string>();
+    const collect = (id: string) => {
+      toDelete.add(id);
+      tasks.filter(t => t.parentId === id).forEach(t => collect(t.id));
+    };
+    collect(taskId);
+    setTasks(tasks.filter(t => !toDelete.has(t.id)));
   };
 
   const handleUpdateTask = (updated: Task) => {
@@ -63,8 +70,10 @@ const Index = () => {
     ));
   };
 
-  const handleImportTasks = (newTasks: Task[]) => {
-    setTasks([...tasks, ...newTasks]);
+  const handleImportTasks = (newTasks: Task[], replacedScopes: string[]) => {
+    // Remove existing tasks of the same scopes that are being imported
+    const filtered = tasks.filter(t => !replacedScopes.includes(t.scope));
+    setTasks([...filtered, ...newTasks]);
   };
 
   return (
@@ -113,6 +122,7 @@ const Index = () => {
             onToggleSubTask={handleToggleSubTask}
             onAddTask={handleAddTask}
             onDeleteTask={handleDeleteTask}
+            onUpdateTask={handleUpdateTask}
           />
         )}
         {view === "year" && (
@@ -123,6 +133,7 @@ const Index = () => {
             onToggleTask={handleToggleTask}
             onAddTask={handleAddTask}
             onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
           />
         )}
         {view === "month" && (
@@ -133,6 +144,7 @@ const Index = () => {
             onToggleTask={handleToggleTask}
             onAddTask={handleAddTask}
             onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
           />
         )}
         {view === "week" && (

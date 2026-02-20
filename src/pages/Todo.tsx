@@ -7,11 +7,12 @@ interface TodoProps {
   onToggleSubTask: (taskId: string, subTaskId: string) => void;
   onAddTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
+  onUpdateTask: (task: Task) => void;
 }
 
 const SCOPES: TaskScope[] = ["year", "month", "week", "day"];
 
-export default function Todo({ tasks, onToggleTask, onToggleSubTask, onAddTask, onDeleteTask }: TodoProps) {
+export default function Todo({ tasks, onToggleTask, onToggleSubTask, onAddTask, onDeleteTask, onUpdateTask }: TodoProps) {
   const grouped = {
     year: tasks.filter((t) => t.scope === "year"),
     month: tasks.filter((t) => t.scope === "month"),
@@ -33,6 +34,7 @@ export default function Todo({ tasks, onToggleTask, onToggleSubTask, onAddTask, 
           onToggleSubTask={onToggleSubTask}
           onAddTask={onAddTask}
           onDeleteTask={onDeleteTask}
+          onUpdateTask={onUpdateTask}
         />
       ))}
     </div>

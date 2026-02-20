@@ -3,7 +3,7 @@ import { Task, Category } from "@/types/task";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, FileText } from "lucide-react";
+import { Sparkles, FileText, AlertTriangle } from "lucide-react";
 import { startOfWeek } from "date-fns";
 
 function detectCategory(text: string): Category {
@@ -145,8 +145,13 @@ export function parseJournalDSL(input: string): Task[] {
   return tasks;
 }
 
+/** Detect which scopes the parsed tasks contain */
+function getScopes(tasks: Task[]): Set<string> {
+  return new Set(tasks.map((t) => t.scope));
+}
+
 interface JournalParserProps {
-  onImportTasks: (tasks: Task[]) => void;
+  onImportTasks: (tasks: Task[], replacedScopes: string[]) => void;
 }
 
 export function JournalParser({ onImportTasks }: JournalParserProps) {
@@ -160,11 +165,14 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
   };
 
   const handleImport = () => {
-    onImportTasks(preview);
+    const scopes = Array.from(getScopes(preview));
+    onImportTasks(preview, scopes);
     setJournal("");
     setPreview([]);
     setOpen(false);
   };
+
+  const parsedScopes = preview.length > 0 ? Array.from(getScopes(preview)) : [];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -197,6 +205,14 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
               </Button>
             )}
           </div>
+          {preview.length > 0 && parsedScopes.length > 0 && (
+            <div className="flex items-start gap-2 p-2 rounded bg-warning/10 border border-warning/30 text-xs text-warning">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Importing will <strong>replace</strong> existing {parsedScopes.join(", ")} tasks with the parsed ones.
+              </span>
+            </div>
+          )}
           {preview.length > 0 && (
             <div className="border border-border rounded-lg p-3 space-y-1 max-h-[300px] overflow-y-auto">
               <p className="text-sm font-semibold text-foreground mb-2">Preview ({preview.length} tasks):</p>
