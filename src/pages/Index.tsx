@@ -1,16 +1,33 @@
-import { useState } from "react";
+// src/pages/index.tsx
+import { useEffect, useState } from "react";
+import { startOfWeek, addWeeks, subWeeks, format } from "date-fns";
+import {
+  Calendar,
+  BarChart3,
+  ListTodo,
+  CalendarDays,
+  CalendarClock,
+  Sun,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { WeeklyCalendar } from "@/components/WeeklyCalendar";
 import { BalanceAnalytics } from "@/components/BalanceAnalytics";
 import { JournalParser } from "@/components/JournalParser";
-import { Button } from "@/components/ui/button";
-import { mockTasks } from "@/lib/mockData";
-import { Task } from "@/types/task";
-import { startOfWeek, addWeeks, subWeeks, format } from "date-fns";
-import { Calendar, BarChart3, ListTodo, CalendarDays, CalendarClock, Sun, ChevronLeft, ChevronRight } from "lucide-react";
+
 import Todo from "./Todo";
 import YearView from "./YearView";
 import MonthView from "./MonthView";
 import DayView from "./DayView";
+
+import { Task } from "@/types/task";
+import {
+  loadTasks,
+  saveTasks,
+  deleteTask,
+} from "@/lib/taskStorage";
 
 type View = "todo" | "year" | "month" | "week" | "day" | "analytics";
 
@@ -24,58 +41,118 @@ const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
 ];
 
 const Index = () => {
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
-  const [currentWeek, setCurrentWeek] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [currentWeek, setCurrentWeek] = useState(
+    startOfWeek(new Date(), { weekStartsOn: 1 })
+  );
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useState(
+    new Date().getFullYear()
+  );
   const [view, setView] = useState<View>("todo");
 
-  const handleToggleTask = (taskId: string) => {
-    setTasks(tasks.map(task =>
-      task.id === taskId ? { ...task, completed: !task.completed } : task
-    ));
+  // ======== LOAD FROM DB ON MOUNT ========
+  useEffect(() => {
+    refreshFromDB();
+  }, []);
+
+  const refreshFromDB = async () => {
+    const loaded = await loadTasks();
+    setTasks(loaded);
   };
 
-  const handleToggleSubTask = (taskId: string, subTaskId: string) => {
-    setTasks(tasks.map(task =>
-      task.id === taskId
-        ? { ...task, subTasks: task.subTasks.map(st => st.id === subTaskId ? { ...st, completed: !st.completed } : st) }
-        : task
-    ));
+  // ======== CENTRALIZED PERSIST FUNCTION ========
+  const persist = async (updated: Task[]) => {
+    setTasks(updated);
+    await saveTasks(updated);
   };
 
-  const handleAddTask = (task: Task) => {
-    setTasks([...tasks, task]);
+  // ======== TASK HANDLERS ========
+
+  const handleAddTask = async (task: Task) => {
+    const updated = [...tasks, task];
+    await persist(updated);
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    // Also delete all descendants
+  const handleToggleTask = async (taskId: string) => {
+    const updated = tasks.map((t) =>
+      t.id === taskId ? { ...t, completed: !t.completed } : t
+    );
+    await persist(updated);
+  };
+
+  const handleToggleSubTask = async (
+    taskId: string,
+    subTaskId: string
+  ) => {
+    const updated = tasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            subTasks: t.subTasks.map((st) =>
+              st.id === subTaskId
+                ? { ...st, completed: !st.completed }
+                : st
+            ),
+          }
+        : t
+    );
+    await persist(updated);
+  };
+
+  const handleUpdateTask = async (updatedTask: Task) => {
+    const updated = tasks.map((t) =>
+      t.id === updatedTask.id ? updatedTask : t
+    );
+    await persist(updated);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
     const toDelete = new Set<string>();
+
     const collect = (id: string) => {
       toDelete.add(id);
-      tasks.filter(t => t.parentId === id).forEach(t => collect(t.id));
+      tasks
+        .filter((t) => t.parentId === id)
+        .forEach((t) => collect(t.id));
     };
+
     collect(taskId);
-    setTasks(tasks.filter(t => !toDelete.has(t.id)));
+
+    const updated = tasks.filter((t) => !toDelete.has(t.id));
+    setTasks(updated);
+
+    for (const id of toDelete) {
+      await deleteTask(id);
+    }
+
+    await refreshFromDB();
   };
 
-  const handleUpdateTask = (updated: Task) => {
-    setTasks(tasks.map(t => t.id === updated.id ? updated : t));
+  const handleRecordTime = async (
+    taskId: string,
+    minutes: number
+  ) => {
+    const updated = tasks.map((t) =>
+      t.id === taskId
+        ? { ...t, timeSpent: (t.timeSpent || 0) + minutes }
+        : t
+    );
+    await persist(updated);
   };
 
-  const handleRecordTime = (taskId: string, minutes: number) => {
-    setTasks(tasks.map(t =>
-      t.id === taskId ? { ...t, timeSpent: (t.timeSpent || 0) + minutes } : t
-    ));
-  };
+  const handleImportTasks = async (newTasks: Task[]) => {
+  const newIds = new Set(newTasks.map((t) => t.id));
 
-  const handleImportTasks = (newTasks: Task[], replacedScopes: string[]) => {
-    // Remove existing tasks of the same scopes that are being imported
-    const filtered = tasks.filter(t => !replacedScopes.includes(t.scope));
-    setTasks([...filtered, ...newTasks]);
-  };
+  // remove only tasks that have same IDs
+  const filtered = tasks.filter((t) => !newIds.has(t.id));
 
+  const combined = [...filtered, ...newTasks];
+  await persist(combined);
+};
+
+  // ======== RENDER ========
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-20">
@@ -86,9 +163,11 @@ const Index = () => {
                 <span className="text-lg">✨</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">Life Balance Planner</h1>
+                <h1 className="text-2xl font-bold text-foreground">
+                  Life Balance Planner
+                </h1>
                 <p className="text-sm text-muted-foreground">
-                  Week of {format(currentWeek, 'MMM d, yyyy')}
+                  Week of {format(currentWeek, "MMM d, yyyy")}
                 </p>
               </div>
             </div>
@@ -125,6 +204,7 @@ const Index = () => {
             onUpdateTask={handleUpdateTask}
           />
         )}
+
         {view === "year" && (
           <YearView
             tasks={tasks}
@@ -136,6 +216,7 @@ const Index = () => {
             onDeleteTask={handleDeleteTask}
           />
         )}
+
         {view === "month" && (
           <MonthView
             tasks={tasks}
@@ -147,16 +228,25 @@ const Index = () => {
             onDeleteTask={handleDeleteTask}
           />
         )}
+
         {view === "week" && (
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => setCurrentWeek(subWeeks(currentWeek, 1))}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCurrentWeek(subWeeks(currentWeek, 1))}
+              >
                 <ChevronLeft className="h-5 w-5" />
               </Button>
               <span className="font-semibold text-foreground">
                 Week of {format(currentWeek, "MMM d, yyyy")}
               </span>
-              <Button variant="ghost" size="icon" onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}
+              >
                 <ChevronRight className="h-5 w-5" />
               </Button>
             </div>
@@ -170,6 +260,7 @@ const Index = () => {
             </div>
           </div>
         )}
+
         {view === "day" && (
           <DayView
             tasks={tasks}
@@ -182,6 +273,7 @@ const Index = () => {
             onRecordTime={handleRecordTime}
           />
         )}
+
         {view === "analytics" && (
           <BalanceAnalytics tasks={tasks} />
         )}
