@@ -143,7 +143,7 @@ export function WeeklyCalendar({
               if (!hasAny) return null;
 
               return (
-                <div key={category} className="contents">
+                <div key={`cat-${category}`} className="contents">
                   <div className="sticky left-0 bg-background z-10 p-3 flex items-center gap-2 border-r">
                     <span className="text-2xl">{categoryInfo.icon}</span>
                     <span className="font-medium text-sm">{categoryInfo.label}</span>
