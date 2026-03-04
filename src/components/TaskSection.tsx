@@ -45,13 +45,19 @@ export function TaskSection({
   const [newCategory, setNewCategory] = useState<Category>("class");
   const [newPriority, setNewPriority] = useState<"low" | "medium" | "high">("medium");
   const [newDate, setNewDate] = useState<Date | undefined>(new Date());
+  const [newStartTime, setNewStartTime] = useState("09:00");
+  const [newEndTime, setNewEndTime] = useState("10:00");
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
   const [addingBreakdownFor, setAddingBreakdownFor] = useState<string | null>(null);
   const [bdTitle, setBdTitle] = useState("");
   const [bdDate, setBdDate] = useState<Date | undefined>(new Date());
   const [bdCategory, setBdCategory] = useState<Category>("class");
+  const [bdStartTime, setBdStartTime] = useState("09:00");
+  const [bdEndTime, setBdEndTime] = useState("10:00");
 
   const completed = tasks.filter((t) => t.completed).length;
   const progress = tasks.length > 0 ? (completed / tasks.length) * 100 : 0;
@@ -70,10 +76,19 @@ export function TaskSection({
     if (scope === "month") dueDate = startOfMonth(dueDate);
     if (scope === "week") dueDate = startOfWeek(dueDate, { weekStartsOn: 1 });
 
-    onAddTask({
+    const task: Task = {
       id: crypto.randomUUID(), title: newTitle.trim(), category: newCategory,
       priority: newPriority, completed: false, scope, subTasks: [], dueDate,
-    });
+    };
+
+    // Add time fields for daily tasks
+    if (scope === "day") {
+      task.startTime = newStartTime;
+      task.endTime = newEndTime;
+      task.timerDuration = 30;
+    }
+
+    onAddTask(task);
     setNewTitle("");
     setAdding(false);
   };
@@ -85,18 +100,38 @@ export function TaskSection({
     if (childScope === "month") dueDate = startOfMonth(dueDate);
     if (childScope === "week") dueDate = startOfWeek(dueDate, { weekStartsOn: 1 });
 
-    onAddTask({
+    const task: Task = {
       id: crypto.randomUUID(), title: bdTitle.trim(), category: bdCategory,
       priority: parentTask.priority, completed: false, scope: childScope,
       parentId: parentTask.id, subTasks: [], dueDate,
-    });
+    };
+
+    if (childScope === "day") {
+      task.startTime = bdStartTime;
+      task.endTime = bdEndTime;
+      task.timerDuration = 30;
+    }
+
+    onAddTask(task);
     setBdTitle("");
     setAddingBreakdownFor(null);
   };
 
   const saveEdit = (task: Task) => {
-    onUpdateTask?.({ ...task, title: editTitle });
+    const updated = { ...task, title: editTitle };
+    if (task.scope === "day" || task.startTime) {
+      updated.startTime = editStartTime;
+      updated.endTime = editEndTime;
+    }
+    onUpdateTask?.(updated);
     setEditingId(null);
+  };
+
+  const startEditItem = (task: Task) => {
+    setEditingId(task.id);
+    setEditTitle(task.title);
+    setEditStartTime(task.startTime || "");
+    setEditEndTime(task.endTime || "");
   };
 
   const dateLabel = (s: TaskScope) => {
@@ -105,6 +140,56 @@ export function TaskSection({
     if (s === "day") return "Date";
     return "Year";
   };
+
+  const renderDatePicker = (
+    selectedDate: Date | undefined,
+    onSelect: (d: Date | undefined) => void,
+    targetScope: TaskScope,
+    startTime?: string,
+    endTime?: string,
+    onStartTimeChange?: (v: string) => void,
+    onEndTimeChange?: (v: string) => void
+  ) => (
+    <div className="flex gap-1 items-center">
+      {targetScope === "week" ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 text-xs">
+              <CalendarIcon className="h-3 w-3 mr-1" />
+              {selectedDate ? `Week of ${format(startOfWeek(selectedDate, { weekStartsOn: 1 }), "MMM d")}` : "Pick week"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(d) => d && onSelect(startOfWeek(d, { weekStartsOn: 1 }))}
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 text-xs">
+              <CalendarIcon className="h-3 w-3 mr-1" />
+              {selectedDate ? format(selectedDate, targetScope === "month" ? "MMM yyyy" : "MMM d") : "Date"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={selectedDate} onSelect={onSelect} className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+      )}
+      {targetScope === "day" && onStartTimeChange && onEndTimeChange && (
+        <>
+          <Input type="time" value={startTime || ""} onChange={(e) => onStartTimeChange(e.target.value)} className="h-7 w-24 text-xs" />
+          <span className="text-xs text-muted-foreground">-</span>
+          <Input type="time" value={endTime || ""} onChange={(e) => onEndTimeChange(e.target.value)} className="h-7 w-24 text-xs" />
+        </>
+      )}
+    </div>
+  );
 
   const renderBreakdownTree = (parentId: string, depth: number = 0): React.ReactNode => {
     const children = getBreakdowns(parentId);
@@ -116,50 +201,75 @@ export function TaskSection({
           const childScope = NEXT_SCOPE[bd.scope];
           const hasChildren = allTasks.some((t) => t.parentId === bd.id);
           const isExpanded = expandedTasks.has(bd.id);
+          const isEditing = editingId === bd.id;
+
           return (
             <div key={bd.id}>
               <div className="flex items-center gap-2 text-xs py-1">
                 <span>{SCOPE_ICONS[bd.scope] || "•"}</span>
                 <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px]">{bd.scope}</span>
                 <Checkbox checked={bd.completed} onCheckedChange={() => onToggleTask(bd.id)} className="h-3 w-3" />
-                <span className={bd.completed ? "line-through text-muted-foreground" : "text-foreground"}>
-                  {bd.title}
-                </span>
-                {bd.dueDate && (
-                  <span className="text-[10px] text-muted-foreground">{format(bd.dueDate, "MMM d")}</span>
+
+                {isEditing ? (
+                  <div className="flex items-center gap-1 flex-1">
+                    <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                      className="h-6 text-xs flex-1" onKeyDown={(e) => e.key === "Enter" && saveEdit(bd)} />
+                    {(bd.scope === "day" || bd.startTime) && (
+                      <>
+                        <Input type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="h-6 w-20 text-xs" />
+                        <Input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="h-6 w-20 text-xs" />
+                      </>
+                    )}
+                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => saveEdit(bd)}><Check className="h-3 w-3" /></Button>
+                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
+                  </div>
+                ) : (
+                  <>
+                    <span className={bd.completed ? "line-through text-muted-foreground" : "text-foreground"}>
+                      {bd.title}
+                    </span>
+                    {bd.startTime && (
+                      <span className="text-[10px] text-muted-foreground">{bd.startTime}-{bd.endTime}</span>
+                    )}
+                    {bd.dueDate && (
+                      <span className="text-[10px] text-muted-foreground">{format(bd.dueDate, "MMM d")}</span>
+                    )}
+                  </>
                 )}
-                {hasChildren && (
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => toggleExpand(bd.id)}>
-                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  </Button>
-                )}
-                {childScope && (
-                  <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground" onClick={() => {
-                    setAddingBreakdownFor(bd.id);
-                    setBdCategory(bd.category);
-                  }}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                )}
-                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => onDeleteTask(bd.id)}>
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-              {addingBreakdownFor === bd.id && (
-                <div className="flex gap-1 items-center ml-6 my-1">
-                  <Input placeholder={`${NEXT_SCOPE[bd.scope]} task...`} value={bdTitle} onChange={(e) => setBdTitle(e.target.value)}
-                    className="h-6 text-xs flex-1" autoFocus onKeyDown={(e) => e.key === "Enter" && handleAddBreakdown(bd)} />
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-6 text-[10px] px-1.5">
-                        <CalendarIcon className="h-3 w-3 mr-1" />
-                        {bdDate ? format(bdDate, "MMM d") : "Date"}
+
+                {!isEditing && (
+                  <>
+                    {hasChildren && (
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => toggleExpand(bd.id)}>
+                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={bdDate} onSelect={setBdDate} className={cn("p-3 pointer-events-auto")} />
-                    </PopoverContent>
-                  </Popover>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground" onClick={() => startEditItem(bd)}>
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                    {childScope && (
+                      <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground" onClick={() => {
+                        setAddingBreakdownFor(bd.id);
+                        setBdCategory(bd.category);
+                      }}>
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => onDeleteTask(bd.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {addingBreakdownFor === bd.id && childScope && (
+                <div className="flex gap-1 items-center ml-6 my-1 flex-wrap">
+                  <Input placeholder={`${childScope} task...`} value={bdTitle} onChange={(e) => setBdTitle(e.target.value)}
+                    className="h-6 text-xs flex-1 min-w-[120px]" autoFocus onKeyDown={(e) => e.key === "Enter" && handleAddBreakdown(bd)} />
+                  {renderDatePicker(
+                    bdDate, setBdDate, childScope,
+                    bdStartTime, bdEndTime, setBdStartTime, setBdEndTime
+                  )}
                   <Button size="sm" className="h-6 text-xs px-2" onClick={() => handleAddBreakdown(bd)}>Add</Button>
                   <Button size="sm" variant="ghost" className="h-6 text-xs px-1" onClick={() => setAddingBreakdownFor(null)}>
                     <X className="h-3 w-3" />
@@ -209,19 +319,12 @@ export function TaskSection({
                   <SelectItem value="high">High</SelectItem>
                 </SelectContent>
               </Select>
-              {(scope === "month" || scope === "week" || scope === "day") && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-left text-sm", !newDate && "text-muted-foreground")}>
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {newDate ? format(newDate, scope === "month" ? "MMM yyyy" : "MMM d, yyyy") : dateLabel(scope)}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={newDate} onSelect={setNewDate} initialFocus className={cn("p-3 pointer-events-auto")} />
-                  </PopoverContent>
-                </Popover>
-              )}
+              {(scope === "month" || scope === "week" || scope === "day") &&
+                renderDatePicker(
+                  newDate, setNewDate, scope,
+                  newStartTime, newEndTime, setNewStartTime, setNewEndTime
+                )
+              }
               <Button size="sm" onClick={handleAdd}>Add</Button>
               <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
             </div>
@@ -245,9 +348,15 @@ export function TaskSection({
               <div className="flex items-start gap-2">
                 <div className="flex-1">
                   {isEditing ? (
-                    <div className="flex items-center gap-2 p-3 bg-card rounded-lg border border-border">
-                      <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-8 text-sm"
+                    <div className="flex items-center gap-2 p-3 bg-card rounded-lg border border-border flex-wrap">
+                      <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-8 text-sm flex-1"
                         onKeyDown={(e) => e.key === "Enter" && saveEdit(task)} />
+                      {(task.scope === "day" || task.startTime) && (
+                        <>
+                          <Input type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="h-8 w-28 text-sm" />
+                          <Input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="h-8 w-28 text-sm" />
+                        </>
+                      )}
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => saveEdit(task)}>
                         <Check className="h-4 w-4" />
                       </Button>
@@ -261,7 +370,7 @@ export function TaskSection({
                 </div>
                 <div className="flex flex-col gap-1 mt-2">
                   {onUpdateTask && !isEditing && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => { setEditingId(task.id); setEditTitle(task.title); }}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => startEditItem(task)}>
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
@@ -285,21 +394,14 @@ export function TaskSection({
 
               {/* Add breakdown form */}
               {addingBreakdownFor === task.id && childScope && (
-                <div className="flex gap-2 items-center ml-6 p-2 bg-muted/30 rounded border border-border">
+                <div className="flex gap-2 items-center ml-6 p-2 bg-muted/30 rounded border border-border flex-wrap">
                   <span className="text-xs text-muted-foreground">{SCOPE_ICONS[childScope]}</span>
                   <Input placeholder={`${childScope} breakdown...`} value={bdTitle} onChange={(e) => setBdTitle(e.target.value)}
-                    className="h-7 text-xs flex-1" autoFocus onKeyDown={(e) => e.key === "Enter" && handleAddBreakdown(task)} />
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-7 text-xs">
-                        <CalendarIcon className="h-3 w-3 mr-1" />
-                        {bdDate ? format(bdDate, childScope === "month" ? "MMM yyyy" : "MMM d") : "Date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={bdDate} onSelect={setBdDate} className={cn("p-3 pointer-events-auto")} />
-                    </PopoverContent>
-                  </Popover>
+                    className="h-7 text-xs flex-1 min-w-[120px]" autoFocus onKeyDown={(e) => e.key === "Enter" && handleAddBreakdown(task)} />
+                  {renderDatePicker(
+                    bdDate, setBdDate, childScope,
+                    bdStartTime, bdEndTime, setBdStartTime, setBdEndTime
+                  )}
                   <Select value={bdCategory} onValueChange={(v) => setBdCategory(v as Category)}>
                     <SelectTrigger className="w-24 h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
