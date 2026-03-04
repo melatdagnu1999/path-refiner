@@ -143,14 +143,11 @@ const Index = () => {
   };
 
   const handleImportTasks = async (newTasks: Task[]) => {
-  const newIds = new Set(newTasks.map((t) => t.id));
-
-  // remove only tasks that have same IDs
-  const filtered = tasks.filter((t) => !newIds.has(t.id));
-
-  const combined = [...filtered, ...newTasks];
-  await persist(combined);
-};
+    const newIds = new Set(newTasks.map((t) => t.id));
+    const filtered = tasks.filter((t) => !newIds.has(t.id));
+    const combined = [...filtered, ...newTasks];
+    await persist(combined);
+  };
 
   // ======== RENDER ========
   return (
@@ -256,6 +253,7 @@ const Index = () => {
                 tasks={tasks}
                 onToggleTask={handleToggleTask}
                 onToggleSubTask={handleToggleSubTask}
+                onUpdateTask={handleUpdateTask}
               />
             </div>
           </div>
