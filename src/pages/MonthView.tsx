@@ -27,6 +27,9 @@ export default function MonthView({ tasks, selectedMonth, onSetMonth, onToggleTa
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState<Category>("class");
+  const [editPriority, setEditPriority] = useState<"low" | "medium" | "high">("medium");
+  const [editDate, setEditDate] = useState("");
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState<Category>("class");
@@ -64,8 +67,22 @@ export default function MonthView({ tasks, selectedMonth, onSetMonth, onToggleTa
     setAdding(false);
   };
 
+  const startEdit = (task: Task) => {
+    setEditingId(task.id);
+    setEditTitle(task.title);
+    setEditCategory(task.category);
+    setEditPriority(task.priority);
+    setEditDate(task.dueDate ? format(task.dueDate, "yyyy-MM-dd") : "");
+  };
+
   const saveEdit = (task: Task) => {
-    onUpdateTask({ ...task, title: editTitle });
+    onUpdateTask({
+      ...task,
+      title: editTitle.trim() || task.title,
+      category: editCategory,
+      priority: editPriority,
+      dueDate: editDate ? new Date(`${editDate}T00:00:00`) : task.dueDate,
+    });
     setEditingId(null);
   };
 
@@ -159,7 +176,7 @@ export default function MonthView({ tasks, selectedMonth, onSetMonth, onToggleTa
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={newPriority} onValueChange={(v) => setNewPriority(v as any)}>
+              <Select value={newPriority} onValueChange={(v) => setNewPriority(v as "low" | "medium" | "high")}>
                 <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">Low</SelectItem>
@@ -201,8 +218,25 @@ export default function MonthView({ tasks, selectedMonth, onSetMonth, onToggleTa
                   <div className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
                     <Checkbox checked={task.completed} onCheckedChange={() => onToggleTask(task.id)} />
                     {isEditing ? (
-                      <div className="flex-1 flex items-center gap-2">
-                        <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-7 text-sm" />
+                      <div className="flex-1 flex flex-wrap items-center gap-2">
+                        <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-7 text-sm min-w-[160px]" />
+                        <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-7 w-40 text-xs" />
+                        <Select value={editCategory} onValueChange={(v) => setEditCategory(v as Category)}>
+                          <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(CATEGORIES).map(([key, val]) => (
+                              <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={editPriority} onValueChange={(v) => setEditPriority(v as "low" | "medium" | "high")}>
+                          <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(task)}><Check className="h-3.5 w-3.5" /></Button>
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
@@ -212,7 +246,8 @@ export default function MonthView({ tasks, selectedMonth, onSetMonth, onToggleTa
                           {task.title}
                         </span>
                         <Badge variant="outline" className="text-xs">{task.priority}</Badge>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingId(task.id); setEditTitle(task.title); }}>
+                        <span className="text-xs text-muted-foreground">{format(task.dueDate, "MMM d")}</span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => startEdit(task)}>
                           <Edit2 className="h-3 w-3" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-6 w-6" title="Add weekly breakdown"
