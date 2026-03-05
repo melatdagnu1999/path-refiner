@@ -37,10 +37,13 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
   const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set());
 
   // Get all day tasks for this date
-  const allDayTasks = tasks.filter(
-    (t) => t.scope === "day" && t.dueDate && isSameDay(t.dueDate, selectedDate)
-  );
 
+const allDayTasks = tasks.filter(
+  (t) =>
+    t.scope === "day" &&
+    t.dueDate &&
+    isSameDay(new Date(t.dueDate), selectedDate)
+);
   // Separate: container tasks (parent is a week task) vs standalone leaf tasks
   const containerTasks = allDayTasks.filter((t) => {
     if (!t.parentId) return false;
