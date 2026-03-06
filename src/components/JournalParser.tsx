@@ -10,42 +10,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Sparkles, FileText } from "lucide-react";
-import { format, startOfWeek } from "date-fns";
+import { startOfWeek } from "date-fns";
 import { importDSL } from "@/lib/JournalImporter";
 
 function detectCategory(text: string): Category {
   const lower = text.toLowerCase();
-
   if (lower.includes("class") || lower.includes("thesis")) return "class";
   if (lower.includes("work") || lower.includes("android")) return "work";
   if (lower.includes("career") || lower.includes("portfolio") || lower.includes("job")) return "career";
   if (lower.includes("church") || lower.includes("prayer") || lower.includes("spiritual")) return "church";
-  if (lower.includes("self") || lower.includes("shower")) return "self-care";
-  if (lower.includes("skill") || lower.includes("learn")) return "skill";
-  if (lower.includes("relationship") || lower.includes("network")) return "relationship";
+  if (lower.includes("self") || lower.includes("shower") || lower.includes("exercise")) return "self-care";
+  if (lower.includes("skill") || lower.includes("learn") || lower.includes("dressmaking")) return "skill";
+  if (lower.includes("relationship") || lower.includes("network") || lower.includes("meetup")) return "relationship";
   if (lower.includes("personal")) return "personal";
-  if (lower.includes("fun") || lower.includes("tennis") || lower.includes("leisure")) return "fun";
-
+  if (lower.includes("fun") || lower.includes("tennis") || lower.includes("leisure") || lower.includes("recharge")) return "fun";
   return "work";
-}
-
-function extractTime(text: string) {
-  const timeRegex = /^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})\s*:?\s*(.*)$/;
-  const match = text.trim().match(timeRegex);
-
-  if (!match) {
-    return {
-      clean: text.trim(),
-      start: undefined,
-      end: undefined,
-    };
-  }
-
-  return {
-    start: match[1],
-    end: match[2],
-    clean: match[3].trim() || text.trim(),
-  };
 }
 
 function extractDeadline(line: string): Date | undefined {
@@ -57,6 +36,14 @@ function extractDeadline(line: string): Date | undefined {
 function safeDate(input: string): Date | undefined {
   const parsed = new Date(`${input}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function computeDuration(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins <= 0) mins += 24 * 60; // handle overnight
+  return mins;
 }
 
 export function parseJournalDSL(input: string): Task[] {
@@ -72,9 +59,9 @@ export function parseJournalDSL(input: string): Task[] {
   const monthlyMap: Record<string, string> = {};
   const weeklyMap: Record<string, string> = {};
 
-  let currentWeeklyId = "";
-  let currentDailyContainerId = "";
-  let currentDate: Date | undefined;
+  // Legacy format tracking
+  let legacyCurrentWeeklyId = "";
+  let legacyCurrentDate: Date | undefined;
 
   const registerTask = (task: Task) => {
     tasks.push(task);
@@ -82,6 +69,7 @@ export function parseJournalDSL(input: string): Task[] {
   };
 
   for (const line of lines) {
+    // ===== ADD_CORE =====
     if (line.startsWith("ADD_CORE")) {
       const title = line.match(/"([^"]+)"/)?.[1] ?? "Year Goal";
       const categoryToken = line.match(/CATEGORY\s+"([^"]+)"/)?.[1] ?? "";
@@ -103,6 +91,7 @@ export function parseJournalDSL(input: string): Task[] {
       continue;
     }
 
+    // ===== ADD_MONTHLY =====
     if (line.startsWith("ADD_MONTHLY")) {
       const index = line.match(/ADD_MONTHLY\s+(\d+)/)?.[1];
       const title = line.match(/TITLE\s+"([^"]+)"/)?.[1] || "Monthly Goal";
@@ -131,6 +120,7 @@ export function parseJournalDSL(input: string): Task[] {
       continue;
     }
 
+    // ===== ADD_WEEKLY =====
     if (line.startsWith("ADD_WEEKLY")) {
       const index = line.match(/ADD_WEEKLY\s+(\d+)/)?.[1];
       const title = line.match(/TITLE\s+"([^"]+)"/)?.[1] || "Weekly Plan";
@@ -141,8 +131,6 @@ export function parseJournalDSL(input: string): Task[] {
 
       const id = crypto.randomUUID();
       weeklyMap[index] = id;
-      currentWeeklyId = id;
-      currentDailyContainerId = "";
 
       const parentCategory = taskById[monthlyMap[monthlyRef]]?.category;
       const weekDate = safeDate(week) ?? new Date();
@@ -161,63 +149,85 @@ export function parseJournalDSL(input: string): Task[] {
       continue;
     }
 
+    // ===== NEW FORMAT: ADD_SUBTASK_DAILY with WEEKLY_ID, DATE, TIME, TITLE =====
+    if (line.startsWith("ADD_SUBTASK_DAILY")) {
+      // Try new format first: ADD_SUBTASK_DAILY 1 WEEKLY_ID 1 DATE "2026-03-06" TIME "08:00-10:00" TITLE "Thesis Deep Work"
+      const newMatch = line.match(
+        /ADD_SUBTASK_DAILY\s+\d+\s+WEEKLY_ID\s+(\d+)\s+DATE\s+"([^"]+)"\s+TIME\s+"(\d{2}:\d{2})-(\d{2}:\d{2})"\s+TITLE\s+"([^"]+)"/
+      );
+
+      if (newMatch) {
+        const [, weeklyRef, dateStr, startTime, endTime, title] = newMatch;
+        const parentWeeklyId = weeklyMap[weeklyRef];
+        if (!parentWeeklyId) continue;
+
+        const date = safeDate(dateStr);
+        if (!date) continue;
+
+        const parentWeekly = taskById[parentWeeklyId];
+        const duration = computeDuration(startTime, endTime);
+
+        registerTask({
+          id: crypto.randomUUID(),
+          title,
+          category: parentWeekly?.category ?? detectCategory(title),
+          priority: "medium",
+          completed: false,
+          scope: "day",
+          parentId: parentWeeklyId,
+          dueDate: new Date(date),
+          startTime,
+          endTime,
+          timerDuration: duration,
+          timeSpent: 0,
+          subTasks: [],
+        });
+        continue;
+      }
+
+      // Legacy format: ADD_SUBTASK_DAILY 1 "07:00-07:30: Wake up & morning routine"
+      const legacyMatch = line.match(/ADD_SUBTASK_DAILY\s+\d+\s+"([^"]+)"/);
+      if (legacyMatch && legacyCurrentDate) {
+        const raw = legacyMatch[1];
+        const timeMatch = raw.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})\s*:?\s*(.*)$/);
+
+        const title = timeMatch ? timeMatch[3].trim() || raw : raw;
+        const startTime = timeMatch ? timeMatch[1] : undefined;
+        const endTime = timeMatch ? timeMatch[2] : undefined;
+        const duration = startTime && endTime ? computeDuration(startTime, endTime) : undefined;
+
+        const parentWeekly = legacyCurrentWeeklyId ? taskById[legacyCurrentWeeklyId] : undefined;
+
+        registerTask({
+          id: crypto.randomUUID(),
+          title,
+          category: parentWeekly?.category ?? detectCategory(title),
+          priority: "medium",
+          completed: false,
+          scope: "day",
+          parentId: legacyCurrentWeeklyId || undefined,
+          dueDate: new Date(legacyCurrentDate),
+          startTime,
+          endTime,
+          timerDuration: duration,
+          timeSpent: 0,
+          subTasks: [],
+        });
+      }
+      continue;
+    }
+
+    // ===== ADD_DAILY (legacy - just sets context, no container task) =====
     if (line.startsWith("ADD_DAILY")) {
       const date = line.match(/DATE\s+"([^"]+)"/)?.[1];
       const weeklyRef = line.match(/WEEKLY_ID\s+(\d+)/)?.[1];
 
       if (!date || !weeklyRef || !weeklyMap[weeklyRef]) continue;
 
-      currentWeeklyId = weeklyMap[weeklyRef];
-      currentDate = safeDate(date);
-      if (!currentDate) continue;
-
-      const parentWeekly = taskById[currentWeeklyId];
-      const dailyContainerId = crypto.randomUUID();
-      currentDailyContainerId = dailyContainerId;
-
-      registerTask({
-        id: dailyContainerId,
-        title: `Daily Plan - ${format(currentDate, "MMM d, yyyy")}`,
-        category: parentWeekly?.category ?? "work",
-        priority: "medium",
-        completed: false,
-        scope: "day",
-        parentId: currentWeeklyId,
-        dueDate: new Date(currentDate),
-        subTasks: [],
-      });
+      legacyCurrentWeeklyId = weeklyMap[weeklyRef];
+      legacyCurrentDate = safeDate(date);
+      // NO container task created - subtasks go directly under weekly parent
       continue;
-    }
-
-    if (line.startsWith("ADD_SUBTASK_DAILY")) {
-      const raw = line.match(/"([^"]+)"/)?.[1];
-      if (!raw || !currentDate) continue;
-
-      const parsed = extractTime(raw);
-
-      const fallbackCategory =
-        taskById[currentDailyContainerId]?.category ??
-        taskById[currentWeeklyId]?.category ??
-        detectCategory(parsed.clean);
-
-      const task: Task = {
-        id: crypto.randomUUID(),
-        title: parsed.clean,
-        category: fallbackCategory,
-        priority: "medium",
-        completed: false,
-        scope: "day",
-        parentId: currentDailyContainerId || currentWeeklyId || undefined,
-        dueDate: new Date(currentDate),
-        subTasks: [],
-      };
-
-      if (parsed.start && parsed.end) {
-        task.startTime = parsed.start;
-        task.endTime = parsed.end;
-      }
-
-      registerTask(task);
     }
   }
 
@@ -251,15 +261,15 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Sparkles className="h-4 w-4" />
-          Get AI Insights
+          Import DSL
         </Button>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex gap-2">
             <FileText className="h-5 w-5" />
-            Journal Planner
+            Journal Planner DSL
           </DialogTitle>
         </DialogHeader>
 
@@ -267,18 +277,33 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
           value={journal}
           onChange={(e) => setJournal(e.target.value)}
           placeholder="Paste DSL here..."
-          className="min-h-[200px]"
+          className="min-h-[200px] font-mono text-xs"
         />
 
         <div className="flex gap-2 mt-3">
           <Button variant="outline" onClick={handleParse}>
-            Parse
+            Parse & Preview
           </Button>
 
           {preview.length > 0 && (
-            <Button onClick={handleImport}>Import {preview.length}</Button>
+            <Button onClick={handleImport}>Import {preview.length} tasks</Button>
           )}
         </div>
+
+        {preview.length > 0 && (
+          <div className="mt-4 space-y-1 max-h-[300px] overflow-y-auto border rounded p-3">
+            <p className="text-sm font-semibold mb-2">Preview ({preview.length} tasks):</p>
+            {preview.map((t) => (
+              <div key={t.id} className="text-xs flex gap-2 items-center">
+                <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px]">{t.scope}</span>
+                <span className="text-muted-foreground">{t.category}</span>
+                {t.startTime && <span className="text-muted-foreground">{t.startTime}-{t.endTime}</span>}
+                <span className="font-medium">{t.title}</span>
+                {t.timerDuration && <span className="text-muted-foreground">({t.timerDuration}m)</span>}
+              </div>
+            ))}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

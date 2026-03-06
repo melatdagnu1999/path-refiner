@@ -2,28 +2,25 @@ import initSqlJs, { Database } from "sql.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 
 const DB_KEY = "life_planner_db";
+const DB_JSON_KEY = "life_planner_db_debug";
 
 let db: Database | null = null;
 
 function decodeBase64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-
   return bytes;
 }
 
 function encodeUint8ArrayToBase64(bytes: Uint8Array): string {
   const chunkSize = 0x8000;
   let binary = "";
-
   for (let i = 0; i < bytes.length; i += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
-
   return btoa(binary);
 }
 
@@ -84,4 +81,22 @@ export async function saveDB() {
   const data = db.export();
   const b64 = encodeUint8ArrayToBase64(data);
   localStorage.setItem(DB_KEY, b64);
+
+  // Also save a human-readable JSON mirror for debugging
+  try {
+    const result = db.exec("SELECT * FROM tasks");
+    if (result.length) {
+      const cols = result[0].columns;
+      const rows = result[0].values.map((row: any[]) => {
+        const obj: any = {};
+        cols.forEach((col, i) => (obj[col] = row[i]));
+        return obj;
+      });
+      localStorage.setItem(DB_JSON_KEY, JSON.stringify(rows, null, 2));
+    } else {
+      localStorage.setItem(DB_JSON_KEY, "[]");
+    }
+  } catch {
+    // non-critical
+  }
 }
