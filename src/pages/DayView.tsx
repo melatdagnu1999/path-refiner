@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TaskTimer } from "@/components/TaskTimer";
 import { format, isSameDay, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Clock, Edit2, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Clock, Edit2, Check, X } from "lucide-react";
 
 interface DayViewProps {
   tasks: Task[];
@@ -37,50 +37,47 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
   const [newStart, setNewStart] = useState("09:00");
   const [newEnd, setNewEnd] = useState("10:00");
   const [newTimer, setNewTimer] = useState("30");
-  const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set());
 
+  // Get all daily tasks for today
   const allDayTasks = tasks.filter(
-    (t) =>
-      t.scope === "day" &&
-      t.dueDate &&
-      isSameDay(new Date(t.dueDate), selectedDate)
+    (t) => t.scope === "day" && t.dueDate && isSameDay(new Date(t.dueDate), selectedDate)
   );
 
-  const containerTasks = allDayTasks.filter((t) => {
-    if (!t.parentId) return false;
-    const parent = tasks.find((p) => p.id === t.parentId);
-    return parent && parent.scope === "week";
+  // Group by parent weekly task
+  const weeklyParentIds = new Set<string>();
+  allDayTasks.forEach((t) => {
+    if (t.parentId) {
+      const parent = tasks.find((p) => p.id === t.parentId);
+      if (parent && parent.scope === "week") {
+        weeklyParentIds.add(parent.id);
+      }
+    }
   });
+
+  const weeklyParents = tasks.filter((t) => weeklyParentIds.has(t.id));
+  const getChildrenOfWeekly = (weeklyId: string) =>
+    allDayTasks
+      .filter((t) => t.parentId === weeklyId)
+      .sort((a, b) => (a.startTime || "99:99").localeCompare(b.startTime || "99:99"));
 
   const standaloneTasks = allDayTasks.filter((t) => {
     if (!t.parentId) return true;
     const parent = tasks.find((p) => p.id === t.parentId);
-    return !parent || (parent.scope !== "day" && parent.scope !== "week");
+    return !parent || parent.scope !== "week";
   });
 
-  const getChildTasks = (containerId: string) =>
-    allDayTasks
-      .filter((t) => t.parentId === containerId)
-      .sort((a, b) => (a.startTime || "99:99").localeCompare(b.startTime || "99:99"));
-
-  const leafTasks = [
+  const allLeafTasks = [
     ...standaloneTasks,
-    ...containerTasks.flatMap((c) => getChildTasks(c.id)),
+    ...weeklyParents.flatMap((wp) => getChildrenOfWeekly(wp.id)),
   ];
 
-  const completed = leafTasks.filter((t) => t.completed).length;
-  const progress = leafTasks.length > 0 ? (completed / leafTasks.length) * 100 : 0;
-  const totalTimeSpent = leafTasks.reduce((sum, t) => sum + (t.timeSpent || 0), 0);
-
-  const toggleContainer = (id: string) => {
-    const next = new Set(expandedContainers);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setExpandedContainers(next);
-  };
+  const completed = allLeafTasks.filter((t) => t.completed).length;
+  const progress = allLeafTasks.length > 0 ? (completed / allLeafTasks.length) * 100 : 0;
+  const totalTimeSpent = allLeafTasks.reduce((sum, t) => sum + (t.timeSpent || 0), 0);
 
   const handleAdd = () => {
     if (!newTitle.trim()) return;
-
+    const timerVal = parseInt(newTimer, 10) || 30;
     onAddTask({
       id: crypto.randomUUID(),
       title: newTitle.trim(),
@@ -92,9 +89,8 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
       dueDate: selectedDate,
       startTime: newStart,
       endTime: newEnd,
-      timerDuration: parseInt(newTimer, 10) || 30,
+      timerDuration: timerVal,
     });
-
     setNewTitle("");
     setAdding(false);
   };
@@ -110,11 +106,22 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
   };
 
   const saveEdit = (task: Task) => {
+    const startTime = editStart || undefined;
+    const endTime = editEnd || undefined;
+    let timerDuration = task.timerDuration;
+    if (startTime && endTime) {
+      const [sh, sm] = startTime.split(":").map(Number);
+      const [eh, em] = endTime.split(":").map(Number);
+      let mins = (eh * 60 + em) - (sh * 60 + sm);
+      if (mins <= 0) mins += 24 * 60;
+      timerDuration = mins;
+    }
     onUpdateTask({
       ...task,
       title: editTitle.trim() || task.title,
-      startTime: editStart || undefined,
-      endTime: editEnd || undefined,
+      startTime,
+      endTime,
+      timerDuration,
       dueDate: editDate ? new Date(`${editDate}T00:00:00`) : task.dueDate,
       category: editCategory,
       priority: editPriority,
@@ -181,6 +188,9 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
                     {task.title}
                   </span>
                   <Badge variant="outline" className="text-xs">{task.priority}</Badge>
+                  {task.timerDuration && (
+                    <span className="text-[10px] text-muted-foreground">({task.timerDuration}m)</span>
+                  )}
                   <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => startEdit(task)}>
                     <Edit2 className="h-3 w-3" />
                   </Button>
@@ -238,7 +248,7 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
               <span className="flex items-center gap-1 text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" /> {totalTimeSpent}m tracked
               </span>
-              <span className="font-semibold">{completed}/{leafTasks.length} completed</span>
+              <span className="font-semibold">{completed}/{allLeafTasks.length} completed</span>
             </div>
           </div>
           <Progress value={progress} className="h-3" />
@@ -293,36 +303,28 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
         </Card>
       )}
 
-      {containerTasks.map((container) => {
-        const children = getChildTasks(container.id);
+      {/* Tasks grouped by weekly parent */}
+      {weeklyParents.map((wp) => {
+        const children = getChildrenOfWeekly(wp.id);
+        if (children.length === 0) return null;
         const childCompleted = children.filter((c) => c.completed).length;
-        const isExpanded = expandedContainers.has(container.id);
 
         return (
-          <Card key={container.id} className="border-primary/20">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleContainer(container.id)}>
-                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <CardTitle className="text-sm font-medium">{container.title}</CardTitle>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {childCompleted}/{children.length} tasks
-                </span>
-              </div>
-              {children.length > 0 && <Progress value={(childCompleted / children.length) * 100} className="h-1.5 mt-1" />}
-            </CardHeader>
-            {isExpanded && (
-              <CardContent className="space-y-2 pt-0">
-                {children.map((child) => renderTaskRow(child))}
-                {children.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-2">No subtasks</p>
-                )}
-              </CardContent>
-            )}
-          </Card>
+          <div key={wp.id} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{CATEGORIES[wp.category].icon}</span>
+              <h3 className="text-sm font-medium text-foreground">{wp.title}</h3>
+              <span className="text-xs text-muted-foreground ml-auto">{childCompleted}/{children.length}</span>
+            </div>
+            <div className="space-y-2 pl-2 border-l-2 border-border">
+              {children.map((task) => renderTaskRow(task))}
+            </div>
+          </div>
         );
       })}
 
-      {standaloneTasks.length > 0 && containerTasks.length > 0 && (
+      {/* Standalone tasks */}
+      {standaloneTasks.length > 0 && weeklyParents.length > 0 && (
         <h3 className="text-sm font-medium text-muted-foreground pt-2">Other Tasks</h3>
       )}
       <div className="space-y-2">

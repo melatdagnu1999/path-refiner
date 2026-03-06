@@ -52,6 +52,9 @@ export function TaskSection({
   const [editTitle, setEditTitle] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
   const [editEndTime, setEditEndTime] = useState("");
+  const [editDate, setEditDate] = useState<Date | undefined>();
+  const [editCategory, setEditCategory] = useState<Category>("class");
+  const [editPriority, setEditPriority] = useState<"low" | "medium" | "high">("medium");
   const [addingBreakdownFor, setAddingBreakdownFor] = useState<string | null>(null);
   const [bdTitle, setBdTitle] = useState("");
   const [bdDate, setBdDate] = useState<Date | undefined>(new Date());
@@ -81,11 +84,14 @@ export function TaskSection({
       priority: newPriority, completed: false, scope, subTasks: [], dueDate,
     };
 
-    // Add time fields for daily tasks
     if (scope === "day") {
       task.startTime = newStartTime;
       task.endTime = newEndTime;
-      task.timerDuration = 30;
+      const [sh, sm] = newStartTime.split(":").map(Number);
+      const [eh, em] = newEndTime.split(":").map(Number);
+      let mins = (eh * 60 + em) - (sh * 60 + sm);
+      if (mins <= 0) mins += 24 * 60;
+      task.timerDuration = mins;
     }
 
     onAddTask(task);
@@ -109,7 +115,11 @@ export function TaskSection({
     if (childScope === "day") {
       task.startTime = bdStartTime;
       task.endTime = bdEndTime;
-      task.timerDuration = 30;
+      const [sh, sm] = bdStartTime.split(":").map(Number);
+      const [eh, em] = bdEndTime.split(":").map(Number);
+      let mins = (eh * 60 + em) - (sh * 60 + sm);
+      if (mins <= 0) mins += 24 * 60;
+      task.timerDuration = mins;
     }
 
     onAddTask(task);
@@ -118,10 +128,23 @@ export function TaskSection({
   };
 
   const saveEdit = (task: Task) => {
-    const updated = { ...task, title: editTitle };
+    const updated: Task = {
+      ...task,
+      title: editTitle.trim() || task.title,
+      category: editCategory,
+      priority: editPriority,
+    };
+    if (editDate) updated.dueDate = editDate;
     if (task.scope === "day" || task.startTime) {
-      updated.startTime = editStartTime;
-      updated.endTime = editEndTime;
+      updated.startTime = editStartTime || undefined;
+      updated.endTime = editEndTime || undefined;
+      if (updated.startTime && updated.endTime) {
+        const [sh, sm] = updated.startTime.split(":").map(Number);
+        const [eh, em] = updated.endTime.split(":").map(Number);
+        let mins = (eh * 60 + em) - (sh * 60 + sm);
+        if (mins <= 0) mins += 24 * 60;
+        updated.timerDuration = mins;
+      }
     }
     onUpdateTask?.(updated);
     setEditingId(null);
@@ -132,13 +155,9 @@ export function TaskSection({
     setEditTitle(task.title);
     setEditStartTime(task.startTime || "");
     setEditEndTime(task.endTime || "");
-  };
-
-  const dateLabel = (s: TaskScope) => {
-    if (s === "month") return "Month";
-    if (s === "week") return "Week of";
-    if (s === "day") return "Date";
-    return "Year";
+    setEditDate(task.dueDate ? new Date(task.dueDate) : new Date());
+    setEditCategory(task.category);
+    setEditPriority(task.priority);
   };
 
   const renderDatePicker = (
@@ -205,21 +224,48 @@ export function TaskSection({
 
           return (
             <div key={bd.id}>
-              <div className="flex items-center gap-2 text-xs py-1">
+              <div className="flex items-center gap-2 text-xs py-1 flex-wrap">
                 <span>{SCOPE_ICONS[bd.scope] || "•"}</span>
                 <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px]">{bd.scope}</span>
                 <Checkbox checked={bd.completed} onCheckedChange={() => onToggleTask(bd.id)} className="h-3 w-3" />
 
                 {isEditing ? (
-                  <div className="flex items-center gap-1 flex-1">
+                  <div className="flex items-center gap-1 flex-1 flex-wrap">
                     <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                      className="h-6 text-xs flex-1" onKeyDown={(e) => e.key === "Enter" && saveEdit(bd)} />
+                      className="h-6 text-xs flex-1 min-w-[120px]" onKeyDown={(e) => e.key === "Enter" && saveEdit(bd)} />
                     {(bd.scope === "day" || bd.startTime) && (
                       <>
                         <Input type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="h-6 w-20 text-xs" />
                         <Input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="h-6 w-20 text-xs" />
                       </>
                     )}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2">
+                          <CalendarIcon className="h-3 w-3 mr-1" />
+                          {editDate ? format(editDate, "MMM d") : "Date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={editDate} onSelect={setEditDate} className={cn("p-3 pointer-events-auto")} />
+                      </PopoverContent>
+                    </Popover>
+                    <Select value={editCategory} onValueChange={(v) => setEditCategory(v as Category)}>
+                      <SelectTrigger className="h-6 w-24 text-[10px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CATEGORIES).map(([key, val]) => (
+                          <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={editPriority} onValueChange={(v) => setEditPriority(v as "low" | "medium" | "high")}>
+                      <SelectTrigger className="h-6 w-20 text-[10px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => saveEdit(bd)}><Check className="h-3 w-3" /></Button>
                     <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
                   </div>
@@ -233,6 +279,9 @@ export function TaskSection({
                     )}
                     {bd.dueDate && (
                       <span className="text-[10px] text-muted-foreground">{format(bd.dueDate, "MMM d")}</span>
+                    )}
+                    {bd.timerDuration && (
+                      <span className="text-[10px] text-muted-foreground">({bd.timerDuration}m)</span>
                     )}
                   </>
                 )}
@@ -357,6 +406,33 @@ export function TaskSection({
                           <Input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="h-8 w-28 text-sm" />
                         </>
                       )}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 text-xs">
+                            <CalendarIcon className="h-3 w-3 mr-1" />
+                            {editDate ? format(editDate, "MMM d") : "Date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={editDate} onSelect={setEditDate} className={cn("p-3 pointer-events-auto")} />
+                        </PopoverContent>
+                      </Popover>
+                      <Select value={editCategory} onValueChange={(v) => setEditCategory(v as Category)}>
+                        <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(CATEGORIES).map(([key, val]) => (
+                            <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={editPriority} onValueChange={(v) => setEditPriority(v as "low" | "medium" | "high")}>
+                        <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => saveEdit(task)}>
                         <Check className="h-4 w-4" />
                       </Button>
@@ -392,7 +468,6 @@ export function TaskSection({
                 </div>
               </div>
 
-              {/* Add breakdown form */}
               {addingBreakdownFor === task.id && childScope && (
                 <div className="flex gap-2 items-center ml-6 p-2 bg-muted/30 rounded border border-border flex-wrap">
                   <span className="text-xs text-muted-foreground">{SCOPE_ICONS[childScope]}</span>
@@ -417,7 +492,6 @@ export function TaskSection({
                 </div>
               )}
 
-              {/* Recursive breakdown tree */}
               {isExpanded && renderBreakdownTree(task.id)}
             </div>
           );
