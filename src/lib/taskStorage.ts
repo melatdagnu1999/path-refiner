@@ -6,24 +6,34 @@ export async function loadTasks(): Promise<Task[]> {
   try {
     const db = await getDB();
     const result = db.exec("SELECT * FROM tasks");
-    if (!result.length) return [];
+    if (!result.length || !result[0] || !result[0].columns) return [];
 
     const cols = result[0].columns;
-    const rows = result[0].values;
+    const rows = result[0].values || [];
 
     const tasks: Task[] = rows.map((row: any[]) => {
       const obj: any = {};
-      cols.forEach((col, i) => (obj[col] = row[i]));
+      if (cols && Array.isArray(cols)) {
+        cols.forEach((col, i) => (obj[col] = row[i]));
+      }
 
-      // Load subtasks for this task
-      const subResult = db.exec(`SELECT * FROM subtasks WHERE taskId = '${obj.id}'`);
-      const subTasks: SubTask[] = subResult.length
-        ? subResult[0].values.map((sr: any[]) => {
-            const sub: any = {};
-            subResult[0].columns.forEach((c, i) => (sub[c] = sr[i]));
-            return { id: sub.id, title: sub.title, completed: !!sub.completed };
-          })
-        : [];
+      // Load subtasks for this task safely using parameterized query
+      let subTasks: SubTask[] = [];
+      try {
+        const stmt = db.prepare("SELECT * FROM subtasks WHERE taskId = ?");
+        stmt.bind([obj.id]);
+        while (stmt.step()) {
+          const subRow = stmt.getAsObject();
+          subTasks.push({
+            id: String(subRow.id || ""),
+            title: String(subRow.title || ""),
+            completed: !!subRow.completed,
+          });
+        }
+        stmt.free();
+      } catch {
+        // subtasks table might not exist yet
+      }
 
       return {
         id: obj.id,
@@ -46,6 +56,33 @@ export async function loadTasks(): Promise<Task[]> {
     return tasks;
   } catch (error) {
     console.error("Failed to load tasks:", error);
+    // Attempt to recover from JSON debug mirror
+    try {
+      const jsonMirror = localStorage.getItem("life_planner_db_debug");
+      if (jsonMirror) {
+        const parsed = JSON.parse(jsonMirror);
+        if (Array.isArray(parsed)) {
+          return parsed.map((obj: any) => ({
+            id: obj.id,
+            title: obj.title || "",
+            category: obj.category || "work",
+            priority: obj.priority || "medium",
+            completed: !!obj.completed,
+            scope: obj.scope || "day",
+            parentId: obj.parentId || undefined,
+            dueDate: obj.dueDate ? new Date(obj.dueDate) : new Date(),
+            startTime: obj.startTime || undefined,
+            endTime: obj.endTime || undefined,
+            timerDuration: obj.timerDuration || undefined,
+            notes: obj.notes || undefined,
+            timeSpent: obj.timeSpent || 0,
+            subTasks: [],
+          }));
+        }
+      }
+    } catch {
+      // total fallback
+    }
     return [];
   }
 }
