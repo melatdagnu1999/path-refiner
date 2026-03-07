@@ -34,8 +34,13 @@ export async function getDB(): Promise<Database> {
   const stored = localStorage.getItem(DB_KEY);
 
   if (stored) {
-    const bytes = decodeBase64ToUint8Array(stored);
-    db = new SQL.Database(bytes);
+    try {
+      const bytes = decodeBase64ToUint8Array(stored);
+      db = new SQL.Database(bytes);
+    } catch (error) {
+      console.warn("Failed to restore SQL database from localStorage, starting fresh:", error);
+      db = new SQL.Database();
+    }
   } else {
     db = new SQL.Database();
   }
@@ -80,9 +85,14 @@ export async function saveDB() {
 
   const data = db.export();
   const b64 = encodeUint8ArrayToBase64(data);
-  localStorage.setItem(DB_KEY, b64);
 
-  // Also save a human-readable JSON mirror for debugging
+  try {
+    localStorage.setItem(DB_KEY, b64);
+  } catch (error) {
+    console.warn("Failed to persist SQL binary database:", error);
+  }
+
+  // Also save a human-readable JSON mirror for debugging and fallback recovery
   try {
     const result = db.exec("SELECT * FROM tasks");
     if (result.length) {
@@ -96,7 +106,7 @@ export async function saveDB() {
     } else {
       localStorage.setItem(DB_JSON_KEY, "[]");
     }
-  } catch {
-    // non-critical
+  } catch (error) {
+    console.warn("Failed to persist SQL JSON debug mirror:", error);
   }
 }
