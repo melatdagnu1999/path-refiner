@@ -28,6 +28,7 @@ import {
   saveTasks,
   deleteTask,
 } from "@/lib/taskStorage";
+import { useTaskNotifications } from "@/hooks/useTaskNotifications";
 
 type View = "todo" | "year" | "month" | "week" | "day" | "analytics";
 
