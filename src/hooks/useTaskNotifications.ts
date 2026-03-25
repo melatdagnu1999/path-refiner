@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 const REMINDER_KEY = "task_reminders_sent";
 const STALE_KEY = "task_stale_sent";
-const CHECK_INTERVAL = 60_000; // check every minute
+const CHECK_INTERVAL = 30_000; // check every 30 seconds for better accuracy
 
 function getSentSet(key: string): Set<string> {
   try {
