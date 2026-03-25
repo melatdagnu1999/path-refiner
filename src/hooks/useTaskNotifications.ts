@@ -70,10 +70,11 @@ export function useTaskNotifications(tasks: Task[]) {
 
         const [h, m] = task.startTime!.split(":").map(Number);
         const taskStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
-        const minsUntil = differenceInMinutes(taskStart, now);
+        const diffMs = taskStart.getTime() - now.getTime();
+        const minsUntil = Math.round(diffMs / 60000);
 
-        // Notify when 25-35 mins away (window to avoid missing)
-        if (minsUntil > 0 && minsUntil <= 30) {
+        // Notify when 0-35 mins away (wider window to avoid missing)
+        if (minsUntil >= 0 && minsUntil <= 35) {
           sendNotification(
             `⏰ Task in ${minsUntil} min`,
             `"${task.title}" starts at ${task.startTime}`
