@@ -63,6 +63,9 @@ const Index = () => {
     setTasks(loaded);
   };
 
+  // ======== NOTIFICATIONS ========
+  useTaskNotifications(tasks);
+
   // ======== CENTRALIZED PERSIST FUNCTION ========
   const persist = async (updated: Task[]) => {
     setTasks(updated);
