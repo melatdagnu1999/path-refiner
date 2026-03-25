@@ -28,6 +28,7 @@ import {
   saveTasks,
   deleteTask,
 } from "@/lib/taskStorage";
+import { useTaskNotifications } from "@/hooks/useTaskNotifications";
 
 type View = "todo" | "year" | "month" | "week" | "day" | "analytics";
 
@@ -61,6 +62,9 @@ const Index = () => {
     const loaded = await loadTasks();
     setTasks(loaded);
   };
+
+  // ======== NOTIFICATIONS ========
+  useTaskNotifications(tasks);
 
   // ======== CENTRALIZED PERSIST FUNCTION ========
   const persist = async (updated: Task[]) => {
