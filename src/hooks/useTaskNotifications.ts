@@ -1,11 +1,28 @@
 import { useEffect, useRef } from "react";
 import { Task } from "@/types/task";
-import { isSameDay, isToday, differenceInMinutes, subDays } from "date-fns";
+import { isSameDay, isToday, subDays } from "date-fns";
 import { toast } from "sonner";
 
 const REMINDER_KEY = "task_reminders_sent";
 const STALE_KEY = "task_stale_sent";
-const CHECK_INTERVAL = 30_000; // check every 30 seconds for better accuracy
+const CHECK_INTERVAL = 30_000;
+
+// Event system for floating timer
+export type TimerNotificationEvent = {
+  task: Task;
+  minsUntil: number;
+};
+
+const listeners = new Set<(e: TimerNotificationEvent) => void>();
+
+export function onTimerNotification(cb: (e: TimerNotificationEvent) => void) {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
+}
+
+function emitTimerNotification(e: TimerNotificationEvent) {
+  listeners.forEach((cb) => cb(e));
+}
 
 function getSentSet(key: string): Set<string> {
   try {
@@ -31,10 +48,7 @@ function requestPermission() {
 }
 
 function sendNotification(title: string, body: string) {
-  // Always show in-app toast
   toast(title, { description: body, duration: 10000 });
-
-  // Also try browser notification
   if ("Notification" in window && Notification.permission === "granted") {
     try {
       new Notification(title, { body, icon: "✨" });
@@ -73,34 +87,33 @@ export function useTaskNotifications(tasks: Task[]) {
         const diffMs = taskStart.getTime() - now.getTime();
         const minsUntil = Math.round(diffMs / 60000);
 
-        // Notify when 0-35 mins away (wider window to avoid missing)
         if (minsUntil >= 0 && minsUntil <= 35) {
+          const duration = task.timerDuration ? ` (${task.timerDuration}m timer)` : "";
+          const timeRange = task.endTime ? `${task.startTime} - ${task.endTime}` : task.startTime!;
           sendNotification(
             `⏰ Task in ${minsUntil} min`,
-            `"${task.title}" starts at ${task.startTime}`
+            `"${task.title}" at ${timeRange}${duration}`
           );
+          // Emit event so floating timer can auto-start
+          emitTimerNotification({ task, minsUntil });
           cleanedReminders.add(reminderKey);
         }
       }
       saveSentSet(REMINDER_KEY, cleanedReminders);
 
-      // --- 2) Stale / no-progress task notifications (check once per session) ---
+      // --- 2) Stale / no-progress task notifications ---
       const staleSent = getSentSet(STALE_KEY);
       const cleanedStale = new Set<string>();
-      // Only check stale tasks between 9 AM and 10 AM to avoid spam
       const hour = now.getHours();
 
       if (hour >= 9 && hour <= 10) {
-        // Find tasks due today or overdue that have no progress
         const staleTasks = tasks.filter((t) => {
           if (t.completed) return false;
           if (t.scope !== "day" && t.scope !== "week") return false;
           const due = new Date(t.dueDate);
-          // Overdue or due today
           const isOverdue = due < subDays(today, 0) && !isSameDay(due, today);
           const isDueToday = isSameDay(due, today);
           if (!isDueToday && !isOverdue) return false;
-          // No time spent and no subtasks completed
           const noProgress = (t.timeSpent || 0) === 0 && t.subTasks.every((st) => !st.completed);
           return noProgress;
         });
@@ -122,12 +135,10 @@ export function useTaskNotifications(tasks: Task[]) {
           cleanedStale.add(staleKey);
         }
       }
-      // Keep today's stale entries
       staleSent.forEach((k) => { if (k.startsWith(todayKey)) cleanedStale.add(k); });
       saveSentSet(STALE_KEY, cleanedStale);
     };
 
-    // Run immediately + on interval
     check();
     intervalRef.current = setInterval(check, CHECK_INTERVAL);
 
