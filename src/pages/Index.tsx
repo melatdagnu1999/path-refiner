@@ -29,6 +29,7 @@ import {
   deleteTask,
 } from "@/lib/taskStorage";
 import { useTaskNotifications } from "@/hooks/useTaskNotifications";
+import { FloatingTimer } from "@/components/FloatingTimer";
 
 type View = "todo" | "year" | "month" | "week" | "day" | "analytics";
 
