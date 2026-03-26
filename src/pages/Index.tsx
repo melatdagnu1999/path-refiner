@@ -281,6 +281,8 @@ const Index = () => {
           <BalanceAnalytics tasks={tasks} />
         )}
       </main>
+
+      <FloatingTimer onRecordTime={handleRecordTime} />
     </div>
   );
 };
