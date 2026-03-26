@@ -95,11 +95,11 @@ export async function saveDB() {
   // Also save a human-readable JSON mirror for debugging and fallback recovery
   try {
     const result = db.exec("SELECT * FROM tasks");
-    if (result.length) {
+    if (result.length && result[0] && result[0].columns && result[0].values) {
       const cols = result[0].columns;
       const rows = result[0].values.map((row: any[]) => {
         const obj: any = {};
-        cols.forEach((col, i) => (obj[col] = row[i]));
+        cols.forEach((col: string, i: number) => (obj[col] = row[i]));
         return obj;
       });
       localStorage.setItem(DB_JSON_KEY, JSON.stringify(rows, null, 2));
