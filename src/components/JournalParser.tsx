@@ -282,6 +282,7 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
   const [open, setOpen] = useState(false);
   const [journal, setJournal] = useState("");
   const [preview, setPreview] = useState<Task[]>([]);
+  const [progressReports, setProgressReports] = useState<ProgressReport[]>([]);
 
   const handleParse = () => {
     const result = parseJournalDSL(journal);

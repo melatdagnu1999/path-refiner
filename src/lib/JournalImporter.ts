@@ -20,7 +20,7 @@ export async function importDSL(dslText: string): Promise<Task[]> {
   }
 
   // 1️⃣ Parse DSL
-  const parsedTasks: Task[] = parseJournalDSL(dslText);
+  const { tasks: parsedTasks } = parseJournalDSL(dslText);
 
   if (!parsedTasks || parsedTasks.length === 0) {
     return [];
