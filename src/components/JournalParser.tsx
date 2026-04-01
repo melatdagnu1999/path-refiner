@@ -226,7 +226,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
       continue;
     }
 
-    // ===== ADD_DAILY (legacy - just sets context, no container task) =====
+    // ===== ADD_DAILY (legacy) =====
     if (line.startsWith("ADD_DAILY")) {
       const date = line.match(/DATE\s+"([^"]+)"/)?.[1];
       const weeklyRef = line.match(/WEEKLY_ID\s+(\d+)/)?.[1];
@@ -235,12 +235,43 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 
       legacyCurrentWeeklyId = weeklyMap[weeklyRef];
       legacyCurrentDate = safeDate(date);
-      // NO container task created - subtasks go directly under weekly parent
+      continue;
+    }
+
+    // ===== PROGRESS =====
+    // Format: PROGRESS SCOPE "year|month|week" ID 1 PERCENT 60 NOTES "On track..."
+    if (line.startsWith("PROGRESS")) {
+      const scope = line.match(/SCOPE\s+"([^"]+)"/)?.[1] || "year";
+      const refId = line.match(/ID\s+(\d+)/)?.[1];
+      const percent = parseInt(line.match(/PERCENT\s+(\d+)/)?.[1] || "0", 10);
+      const notes = line.match(/NOTES\s+"([^"]+)"/)?.[1] || "";
+
+      let targetId: string | undefined;
+      let targetTitle: string | undefined;
+
+      if (scope === "year" && refId && yearlyMap[refId]) {
+        targetId = yearlyMap[refId];
+        targetTitle = taskById[targetId]?.title;
+      } else if (scope === "month" && refId && monthlyMap[refId]) {
+        targetId = monthlyMap[refId];
+        targetTitle = taskById[targetId]?.title;
+      } else if (scope === "week" && refId && weeklyMap[refId]) {
+        targetId = weeklyMap[refId];
+        targetTitle = taskById[targetId]?.title;
+      }
+
+      progress.push({ scope, targetId, targetTitle, percent, notes });
+
+      // Also update the task's progress field if found
+      if (targetId && taskById[targetId]) {
+        taskById[targetId].progress = percent;
+        taskById[targetId].notes = notes;
+      }
       continue;
     }
   }
 
-  return tasks;
+  return { tasks, progress };
 }
 
 interface JournalParserProps {
