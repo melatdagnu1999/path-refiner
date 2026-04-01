@@ -258,7 +258,10 @@ export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onTo
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      <DailyAdvice tasks={tasks} selectedDate={selectedDate} allTasks={allTasks} />
+
+      <div className="flex justify-between items-center">
+        <GoogleCalendarSync tasks={tasks} />
         <Button size="sm" className="gap-1" onClick={() => setAdding(!adding)}>
           <Plus className="h-4 w-4" /> Add Task
         </Button>
