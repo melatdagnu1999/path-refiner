@@ -46,13 +46,22 @@ function computeDuration(startTime: string, endTime: string): number {
   return mins;
 }
 
-export function parseJournalDSL(input: string): Task[] {
+export interface ProgressReport {
+  scope: string;
+  targetId?: string;
+  targetTitle?: string;
+  percent: number;
+  notes: string;
+}
+
+export function parseJournalDSL(input: string): { tasks: Task[]; progress: ProgressReport[] } {
   const lines = input
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
   const tasks: Task[] = [];
+  const progress: ProgressReport[] = [];
   const taskById: Record<string, Task> = {};
 
   const yearlyMap: Record<string, string> = {};
