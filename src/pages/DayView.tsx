@@ -25,7 +25,7 @@ interface DayViewProps {
   onRecordTime: (taskId: string, minutes: number) => void;
 }
 
-export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, onToggleSubTask, onAddTask, onUpdateTask, onRecordTime }: DayViewProps) {
+export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onToggleTask, onToggleSubTask, onAddTask, onUpdateTask, onRecordTime }: DayViewProps) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
