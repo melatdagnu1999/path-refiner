@@ -284,8 +284,9 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
   const [preview, setPreview] = useState<Task[]>([]);
 
   const handleParse = () => {
-    const parsed = parseJournalDSL(journal);
-    setPreview(parsed);
+    const result = parseJournalDSL(journal);
+    setPreview(result.tasks);
+    setProgressReports(result.progress);
   };
 
   const handleImport = async () => {
@@ -293,6 +294,7 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
     onImportTasks(imported);
     setJournal("");
     setPreview([]);
+    setProgressReports([]);
     setOpen(false);
   };
 
@@ -329,6 +331,22 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
             <Button onClick={handleImport}>Import {preview.length} tasks</Button>
           )}
         </div>
+
+        {progressReports.length > 0 && (
+          <div className="mt-4 space-y-2 border rounded p-3 bg-accent/5">
+            <p className="text-sm font-semibold">📊 Progress Analysis ({progressReports.length} reports):</p>
+            {progressReports.map((p, i) => (
+              <div key={i} className="text-xs space-y-0.5 border-b border-border/50 pb-2 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px]">{p.scope}</span>
+                  {p.targetTitle && <span className="font-medium">{p.targetTitle}</span>}
+                  <span className="ml-auto font-semibold text-primary">{p.percent}%</span>
+                </div>
+                {p.notes && <p className="text-muted-foreground pl-2 italic">"{p.notes}"</p>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {preview.length > 0 && (
           <div className="mt-4 space-y-1 max-h-[300px] overflow-y-auto border rounded p-3">
