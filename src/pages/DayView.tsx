@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TaskTimer } from "@/components/TaskTimer";
+import { DailyAdvice } from "@/components/DailyAdvice";
+import { GoogleCalendarSync } from "@/components/GoogleCalendarSync";
 import { format, isSameDay, addDays, subDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, Clock, Edit2, Check, X } from "lucide-react";
 
