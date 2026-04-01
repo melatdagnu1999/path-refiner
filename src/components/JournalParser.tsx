@@ -46,13 +46,22 @@ function computeDuration(startTime: string, endTime: string): number {
   return mins;
 }
 
-export function parseJournalDSL(input: string): Task[] {
+export interface ProgressReport {
+  scope: string;
+  targetId?: string;
+  targetTitle?: string;
+  percent: number;
+  notes: string;
+}
+
+export function parseJournalDSL(input: string): { tasks: Task[]; progress: ProgressReport[] } {
   const lines = input
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
   const tasks: Task[] = [];
+  const progress: ProgressReport[] = [];
   const taskById: Record<string, Task> = {};
 
   const yearlyMap: Record<string, string> = {};
@@ -217,7 +226,7 @@ export function parseJournalDSL(input: string): Task[] {
       continue;
     }
 
-    // ===== ADD_DAILY (legacy - just sets context, no container task) =====
+    // ===== ADD_DAILY (legacy) =====
     if (line.startsWith("ADD_DAILY")) {
       const date = line.match(/DATE\s+"([^"]+)"/)?.[1];
       const weeklyRef = line.match(/WEEKLY_ID\s+(\d+)/)?.[1];
@@ -226,12 +235,43 @@ export function parseJournalDSL(input: string): Task[] {
 
       legacyCurrentWeeklyId = weeklyMap[weeklyRef];
       legacyCurrentDate = safeDate(date);
-      // NO container task created - subtasks go directly under weekly parent
+      continue;
+    }
+
+    // ===== PROGRESS =====
+    // Format: PROGRESS SCOPE "year|month|week" ID 1 PERCENT 60 NOTES "On track..."
+    if (line.startsWith("PROGRESS")) {
+      const scope = line.match(/SCOPE\s+"([^"]+)"/)?.[1] || "year";
+      const refId = line.match(/ID\s+(\d+)/)?.[1];
+      const percent = parseInt(line.match(/PERCENT\s+(\d+)/)?.[1] || "0", 10);
+      const notes = line.match(/NOTES\s+"([^"]+)"/)?.[1] || "";
+
+      let targetId: string | undefined;
+      let targetTitle: string | undefined;
+
+      if (scope === "year" && refId && yearlyMap[refId]) {
+        targetId = yearlyMap[refId];
+        targetTitle = taskById[targetId]?.title;
+      } else if (scope === "month" && refId && monthlyMap[refId]) {
+        targetId = monthlyMap[refId];
+        targetTitle = taskById[targetId]?.title;
+      } else if (scope === "week" && refId && weeklyMap[refId]) {
+        targetId = weeklyMap[refId];
+        targetTitle = taskById[targetId]?.title;
+      }
+
+      progress.push({ scope, targetId, targetTitle, percent, notes });
+
+      // Also update the task's progress field if found
+      if (targetId && taskById[targetId]) {
+        taskById[targetId].progress = percent;
+        taskById[targetId].notes = notes;
+      }
       continue;
     }
   }
 
-  return tasks;
+  return { tasks, progress };
 }
 
 interface JournalParserProps {
@@ -242,10 +282,12 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
   const [open, setOpen] = useState(false);
   const [journal, setJournal] = useState("");
   const [preview, setPreview] = useState<Task[]>([]);
+  const [progressReports, setProgressReports] = useState<ProgressReport[]>([]);
 
   const handleParse = () => {
-    const parsed = parseJournalDSL(journal);
-    setPreview(parsed);
+    const result = parseJournalDSL(journal);
+    setPreview(result.tasks);
+    setProgressReports(result.progress);
   };
 
   const handleImport = async () => {
@@ -253,6 +295,7 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
     onImportTasks(imported);
     setJournal("");
     setPreview([]);
+    setProgressReports([]);
     setOpen(false);
   };
 
@@ -289,6 +332,22 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
             <Button onClick={handleImport}>Import {preview.length} tasks</Button>
           )}
         </div>
+
+        {progressReports.length > 0 && (
+          <div className="mt-4 space-y-2 border rounded p-3 bg-accent/5">
+            <p className="text-sm font-semibold">📊 Progress Analysis ({progressReports.length} reports):</p>
+            {progressReports.map((p, i) => (
+              <div key={i} className="text-xs space-y-0.5 border-b border-border/50 pb-2 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px]">{p.scope}</span>
+                  {p.targetTitle && <span className="font-medium">{p.targetTitle}</span>}
+                  <span className="ml-auto font-semibold text-primary">{p.percent}%</span>
+                </div>
+                {p.notes && <p className="text-muted-foreground pl-2 italic">"{p.notes}"</p>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {preview.length > 0 && (
           <div className="mt-4 space-y-1 max-h-[300px] overflow-y-auto border rounded p-3">

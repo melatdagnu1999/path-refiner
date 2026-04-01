@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TaskTimer } from "@/components/TaskTimer";
+import { DailyAdvice } from "@/components/DailyAdvice";
+import { GoogleCalendarSync } from "@/components/GoogleCalendarSync";
 import { format, isSameDay, addDays, subDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, Clock, Edit2, Check, X } from "lucide-react";
 
 interface DayViewProps {
   tasks: Task[];
+  allTasks: Task[];
   selectedDate: Date;
   onSetDate: (date: Date) => void;
   onToggleTask: (taskId: string) => void;
@@ -22,7 +25,7 @@ interface DayViewProps {
   onRecordTime: (taskId: string, minutes: number) => void;
 }
 
-export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, onToggleSubTask, onAddTask, onUpdateTask, onRecordTime }: DayViewProps) {
+export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onToggleTask, onToggleSubTask, onAddTask, onUpdateTask, onRecordTime }: DayViewProps) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -255,7 +258,10 @@ export default function DayView({ tasks, selectedDate, onSetDate, onToggleTask, 
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      <DailyAdvice tasks={tasks} selectedDate={selectedDate} allTasks={allTasks} />
+
+      <div className="flex justify-between items-center">
+        <GoogleCalendarSync tasks={tasks} />
         <Button size="sm" className="gap-1" onClick={() => setAdding(!adding)}>
           <Plus className="h-4 w-4" /> Add Task
         </Button>

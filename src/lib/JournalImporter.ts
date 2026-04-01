@@ -20,7 +20,7 @@ export async function importDSL(dslText: string): Promise<Task[]> {
   }
 
   // 1️⃣ Parse DSL
-  const parsedTasks: Task[] = parseJournalDSL(dslText);
+  const { tasks: parsedTasks } = parseJournalDSL(dslText);
 
   if (!parsedTasks || parsedTasks.length === 0) {
     return [];
@@ -35,13 +35,14 @@ export async function importDSL(dslText: string): Promise<Task[]> {
   // 3️⃣ Load existing tasks
   const existingTasks = await loadTasks();
 
-  // 4️⃣ Replace tasks by scope (optional but recommended)
+  // 4️⃣ Upsert: replace tasks with matching IDs, then add new ones
+  const newTaskIds = new Set(newTasks.map((t) => t.id));
   const scopesToReplace = newTasks
     .map((t) => t.scope)
     .filter(Boolean);
 
   const filteredTasks = existingTasks.filter(
-    (t) => !scopesToReplace.includes(t.scope)
+    (t) => !newTaskIds.has(t.id) && !scopesToReplace.includes(t.scope)
   );
 
   // 5️⃣ Combine
