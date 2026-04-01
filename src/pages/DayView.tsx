@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight, Plus, Clock, Edit2, Check, X } from "lucide-
 
 interface DayViewProps {
   tasks: Task[];
+  allTasks: Task[];
   selectedDate: Date;
   onSetDate: (date: Date) => void;
   onToggleTask: (taskId: string) => void;
