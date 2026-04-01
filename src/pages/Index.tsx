@@ -267,6 +267,7 @@ const Index = () => {
         {view === "day" && (
           <DayView
             tasks={tasks}
+            allTasks={tasks}
             selectedDate={selectedDate}
             onSetDate={setSelectedDate}
             onToggleTask={handleToggleTask}
