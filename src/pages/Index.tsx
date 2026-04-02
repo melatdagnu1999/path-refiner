@@ -10,6 +10,7 @@ import {
   Sun,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
