@@ -23,15 +23,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  const url = new URL(req.url);
-  const action = url.searchParams.get("action") || (await req.json().catch(() => ({}))).action;
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const body = await req.json().catch(() => ({}));
+  const action = body.action;
 
   try {
     switch (action) {
       case "get-auth-url": {
-        const { redirectUri } = await req.json();
+        const { redirectUri } = body;
         const params = new URLSearchParams({
           client_id: GOOGLE_CLIENT_ID,
           redirect_uri: redirectUri,
@@ -46,7 +44,7 @@ Deno.serve(async (req) => {
       }
 
       case "exchange-code": {
-        const { code, redirectUri } = await req.json();
+        const { code, redirectUri } = body;
         const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -70,7 +68,7 @@ Deno.serve(async (req) => {
       }
 
       case "refresh-token": {
-        const { refreshToken } = await req.json();
+        const { refreshToken } = body;
         const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -93,7 +91,7 @@ Deno.serve(async (req) => {
       }
 
       case "sync-tasks": {
-        const { accessToken, tasks } = await req.json();
+        const { accessToken, tasks } = body;
         const results = [];
 
         for (const task of tasks) {
@@ -127,7 +125,7 @@ Deno.serve(async (req) => {
       }
 
       case "fetch-events": {
-        const { accessToken, timeMin, timeMax } = await req.json();
+        const { accessToken, timeMin, timeMax } = body;
         const params = new URLSearchParams({
           timeMin: new Date(timeMin).toISOString(),
           timeMax: new Date(timeMax).toISOString(),
