@@ -23,10 +23,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const url = new URL(req.url);
-  const action = url.searchParams.get("action") || (await req.json().catch(() => ({}))).action;
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const body = await req.json().catch(() => ({}));
+  const action = body.action;
 
   try {
     switch (action) {
