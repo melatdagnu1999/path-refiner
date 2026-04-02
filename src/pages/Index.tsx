@@ -281,6 +281,13 @@ const Index = () => {
           />
         )}
 
+        {view === "record" && (
+          <DailyRecord
+            selectedDate={selectedDate}
+            onSetDate={setSelectedDate}
+          />
+        )}
+
         {view === "analytics" && (
           <BalanceAnalytics tasks={tasks} />
         )}
