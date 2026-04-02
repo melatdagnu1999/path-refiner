@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       }
 
       case "sync-tasks": {
-        const { accessToken, tasks } = await req.json();
+        const { accessToken, tasks } = body;
         const results = [];
 
         for (const task of tasks) {
