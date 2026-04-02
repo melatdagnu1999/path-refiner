@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       }
 
       case "refresh-token": {
-        const { refreshToken } = await req.json();
+        const { refreshToken } = body;
         const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
