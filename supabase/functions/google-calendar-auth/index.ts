@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
       }
 
       case "fetch-events": {
-        const { accessToken, timeMin, timeMax } = await req.json();
+        const { accessToken, timeMin, timeMax } = body;
         const params = new URLSearchParams({
           timeMin: new Date(timeMin).toISOString(),
           timeMax: new Date(timeMax).toISOString(),
