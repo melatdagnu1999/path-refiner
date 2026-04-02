@@ -5,7 +5,10 @@ const TOKENS_KEY = "gcal_tokens";
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
 function getRedirectUri() {
-  return `${window.location.origin}/auth/callback`;
+  // Always use the published URL for OAuth to avoid redirect URI mismatch
+  // with Google Cloud Console authorized URIs
+  const publishedOrigin = "https://path-refiner.lovable.app";
+  return `${publishedOrigin}/auth/callback`;
 }
 
 async function invokeCalendarFn(action: string, body: Record<string, unknown>) {

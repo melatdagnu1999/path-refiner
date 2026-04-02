@@ -10,6 +10,7 @@ import {
   Sun,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import Todo from "./Todo";
 import YearView from "./YearView";
 import MonthView from "./MonthView";
 import DayView from "./DayView";
+import DailyRecord from "./DailyRecord";
 
 import { Task } from "@/types/task";
 import {
@@ -31,7 +33,7 @@ import {
 import { useTaskNotifications } from "@/hooks/useTaskNotifications";
 import { FloatingTimer } from "@/components/FloatingTimer";
 
-type View = "todo" | "year" | "month" | "week" | "day" | "analytics";
+type View = "todo" | "year" | "month" | "week" | "day" | "record" | "analytics";
 
 const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "todo", label: "Todo Hub", icon: <ListTodo className="h-4 w-4" /> },
@@ -39,6 +41,7 @@ const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "month", label: "Month", icon: <CalendarClock className="h-4 w-4" /> },
   { view: "week", label: "Week", icon: <Calendar className="h-4 w-4" /> },
   { view: "day", label: "Day", icon: <Sun className="h-4 w-4" /> },
+  { view: "record", label: "Record", icon: <ClipboardList className="h-4 w-4" /> },
   { view: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
@@ -275,6 +278,13 @@ const Index = () => {
             onAddTask={handleAddTask}
             onUpdateTask={handleUpdateTask}
             onRecordTime={handleRecordTime}
+          />
+        )}
+
+        {view === "record" && (
+          <DailyRecord
+            selectedDate={selectedDate}
+            onSetDate={setSelectedDate}
           />
         )}
 
