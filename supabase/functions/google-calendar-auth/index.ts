@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   try {
     switch (action) {
       case "get-auth-url": {
-        const { redirectUri } = await req.json();
+        const { redirectUri } = body;
         const params = new URLSearchParams({
           client_id: GOOGLE_CLIENT_ID,
           redirect_uri: redirectUri,
