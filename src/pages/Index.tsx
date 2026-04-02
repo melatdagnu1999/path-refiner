@@ -22,6 +22,7 @@ import Todo from "./Todo";
 import YearView from "./YearView";
 import MonthView from "./MonthView";
 import DayView from "./DayView";
+import DailyRecord from "./DailyRecord";
 
 import { Task } from "@/types/task";
 import {
