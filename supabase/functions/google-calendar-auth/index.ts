@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
       }
 
       case "exchange-code": {
-        const { code, redirectUri } = await req.json();
+        const { code, redirectUri } = body;
         const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
