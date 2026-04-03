@@ -83,7 +83,8 @@ export async function syncTasksToCalendar(tasks: Task[]) {
   const accessToken = await getValidAccessToken();
   const dailyTasks = tasks.filter((t) => t.scope === "day" && t.startTime && t.endTime && t.dueDate);
   if (dailyTasks.length === 0) return { results: [] };
-  return invokeCalendarFn("sync-tasks", { accessToken, tasks: dailyTasks });
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return invokeCalendarFn("sync-tasks", { accessToken, tasks: dailyTasks, timeZone });
 }
 
 export async function fetchCalendarEvents(timeMin: string, timeMax: string) {

@@ -91,7 +91,8 @@ Deno.serve(async (req) => {
       }
 
       case "sync-tasks": {
-        const { accessToken, tasks } = body;
+        const { accessToken, tasks, timeZone } = body;
+        const userTimeZone = timeZone || "UTC";
         const results = [];
 
         for (const task of tasks) {
@@ -101,8 +102,8 @@ Deno.serve(async (req) => {
           const event = {
             summary: task.title,
             description: `Category: ${task.category} | Priority: ${task.priority}`,
-            start: { dateTime: `${dateStr}T${task.startTime}:00`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" },
-            end: { dateTime: `${dateStr}T${task.endTime}:00`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" },
+            start: { dateTime: `${dateStr}T${task.startTime}:00`, timeZone: userTimeZone },
+            end: { dateTime: `${dateStr}T${task.endTime}:00`, timeZone: userTimeZone },
             reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 30 }] },
           };
 
