@@ -13,6 +13,15 @@ import { Sparkles, FileText } from "lucide-react";
 import { startOfWeek } from "date-fns";
 import { importDSL } from "@/lib/JournalImporter";
 
+/** Generate a deterministic ID from a string key so re-imports replace existing tasks */
+function deterministicId(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+  }
+  return `dsl_${Math.abs(hash).toString(36)}`;
+}
+
 function detectCategory(text: string): Category {
   const lower = text.toLowerCase();
   if (lower.includes("class") || lower.includes("thesis")) return "class";
