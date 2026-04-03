@@ -119,7 +119,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 
       if (!index || !month || !yearlyRef || !yearlyMap[yearlyRef]) continue;
 
-      const id = crypto.randomUUID();
+      const id = deterministicId(`month::${title}::${month}`);
       monthlyMap[index] = id;
 
       const parentCategory = taskById[yearlyMap[yearlyRef]]?.category;
