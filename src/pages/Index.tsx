@@ -150,11 +150,8 @@ const Index = () => {
     await persist(updated);
   };
 
-  const handleImportTasks = async (newTasks: Task[]) => {
-    const newIds = new Set(newTasks.map((t) => t.id));
-    const filtered = tasks.filter((t) => !newIds.has(t.id));
-    const combined = [...filtered, ...newTasks];
-    await persist(combined);
+  const handleImportTasks = async (_newTasks: Task[]) => {
+    await refreshFromDB();
   };
 
   // ======== RENDER ========
