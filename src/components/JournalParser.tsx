@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Sparkles, FileText } from "lucide-react";
-import { startOfWeek } from "date-fns";
+import { startOfWeek, format as fmtDate } from "date-fns";
 import { importDSL } from "@/lib/JournalImporter";
 
 /** Generate a deterministic ID from a string key so re-imports replace existing tasks */
