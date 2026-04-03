@@ -199,6 +199,15 @@ export default function DailyRecord({ selectedDate, onSetDate }: DailyRecordProp
           </Button>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant={reminderOn ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={toggleReminder}
+          >
+            {reminderOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            {reminderOn ? "Reminder On" : "Reminder Off"}
+          </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportDSL}>
             <Copy className="h-4 w-4" /> Copy DSL
           </Button>
