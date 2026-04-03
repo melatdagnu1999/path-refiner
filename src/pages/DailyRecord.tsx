@@ -97,7 +97,7 @@ function exportToDSL(date: Date, entries: HourEntry[]): string {
       const startH = String(item.hour).padStart(2, "0");
       const endH = String(item.hour + 1).padStart(2, "0");
       lines.push(
-        `ADD_SUBTASK_DAILY PARENT "record" TITLE "${item.activity}" DATE "${dateStr}" TIME "${startH}:00-${endH}:00" CATEGORY "${cat}"`
+        `DOING "${item.activity}" DATE "${dateStr}" TIME "${startH}:00-${endH}:00" CATEGORY "${cat}"`
       );
     }
     lines.push("");

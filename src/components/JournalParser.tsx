@@ -10,8 +10,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Sparkles, FileText } from "lucide-react";
-import { startOfWeek } from "date-fns";
+import { startOfWeek, format as fmtDate } from "date-fns";
 import { importDSL } from "@/lib/JournalImporter";
+
+/** Generate a deterministic ID from a string key so re-imports replace existing tasks */
+function deterministicId(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+  }
+  return `dsl_${Math.abs(hash).toString(36)}`;
+}
 
 function detectCategory(text: string): Category {
   const lower = text.toLowerCase();
@@ -84,7 +93,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
       const categoryToken = line.match(/CATEGORY\s+"([^"]+)"/)?.[1] ?? "";
       const deadline = extractDeadline(line);
 
-      const id = crypto.randomUUID();
+      const id = deterministicId(`year::${title}`);
       yearlyMap[String(Object.keys(yearlyMap).length + 1)] = id;
 
       registerTask({
@@ -110,7 +119,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 
       if (!index || !month || !yearlyRef || !yearlyMap[yearlyRef]) continue;
 
-      const id = crypto.randomUUID();
+      const id = deterministicId(`month::${title}::${month}`);
       monthlyMap[index] = id;
 
       const parentCategory = taskById[yearlyMap[yearlyRef]]?.category;
@@ -138,7 +147,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 
       if (!index || !week || !monthlyRef || !monthlyMap[monthlyRef]) continue;
 
-      const id = crypto.randomUUID();
+      const id = deterministicId(`week::${title}::${week}`);
       weeklyMap[index] = id;
 
       const parentCategory = taskById[monthlyMap[monthlyRef]]?.category;
@@ -177,7 +186,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
         const duration = computeDuration(startTime, endTime);
 
         registerTask({
-          id: crypto.randomUUID(),
+          id: deterministicId(`day::${title}::${dateStr}::${startTime}-${endTime}`),
           title,
           category: parentWeekly?.category ?? detectCategory(title),
           priority: "medium",
@@ -208,7 +217,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
         const parentWeekly = legacyCurrentWeeklyId ? taskById[legacyCurrentWeeklyId] : undefined;
 
         registerTask({
-          id: crypto.randomUUID(),
+          id: deterministicId(`day::${title}::${fmtDate(legacyCurrentDate, 'yyyy-MM-dd')}::${startTime ?? ''}-${endTime ?? ''}`),
           title,
           category: parentWeekly?.category ?? detectCategory(title),
           priority: "medium",
