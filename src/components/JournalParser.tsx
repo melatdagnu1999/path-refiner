@@ -186,7 +186,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
         const duration = computeDuration(startTime, endTime);
 
         registerTask({
-          id: crypto.randomUUID(),
+          id: deterministicId(`day::${title}::${dateStr}::${startTime}-${endTime}`),
           title,
           category: parentWeekly?.category ?? detectCategory(title),
           priority: "medium",
