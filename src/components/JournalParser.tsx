@@ -217,7 +217,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
         const parentWeekly = legacyCurrentWeeklyId ? taskById[legacyCurrentWeeklyId] : undefined;
 
         registerTask({
-          id: crypto.randomUUID(),
+          id: deterministicId(`day::${title}::${format(legacyCurrentDate, 'yyyy-MM-dd')}::${startTime ?? ''}-${endTime ?? ''}`),
           title,
           category: parentWeekly?.category ?? detectCategory(title),
           priority: "medium",
