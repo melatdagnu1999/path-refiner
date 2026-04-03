@@ -93,7 +93,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
       const categoryToken = line.match(/CATEGORY\s+"([^"]+)"/)?.[1] ?? "";
       const deadline = extractDeadline(line);
 
-      const id = crypto.randomUUID();
+      const id = deterministicId(`year::${title}`);
       yearlyMap[String(Object.keys(yearlyMap).length + 1)] = id;
 
       registerTask({
