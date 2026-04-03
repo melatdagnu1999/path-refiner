@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, Copy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Category, CATEGORIES } from "@/types/task";
@@ -12,6 +12,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    // Play a second beep after a short pause
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.frequency.value = 1100;
+    osc2.type = "sine";
+    gain2.gain.setValueAtTime(0.3, ctx.currentTime + 0.35);
+    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.65);
+    osc2.start(ctx.currentTime + 0.35);
+    osc2.stop(ctx.currentTime + 0.65);
+    setTimeout(() => ctx.close(), 1000);
+  } catch {}
+}
 
 interface HourEntry {
   hour: number;
@@ -80,6 +108,39 @@ function exportToDSL(date: Date, entries: HourEntry[]): string {
 
 export default function DailyRecord({ selectedDate, onSetDate }: DailyRecordProps) {
   const [entries, setEntries] = useState<HourEntry[]>(() => loadEntries(selectedDate));
+  const [reminderOn, setReminderOn] = useState(() => localStorage.getItem("record_reminder") !== "off");
+  const lastBeepHourRef = useRef<number>(-1);
+
+  // Hourly beep reminder
+  useEffect(() => {
+    if (!reminderOn) return;
+    const check = () => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+      // Beep at the start of each hour (within first 1 minute)
+      if (currentMin < 1 && lastBeepHourRef.current !== currentHour) {
+        lastBeepHourRef.current = currentHour;
+        playBeep();
+        toast.info(`⏰ Time to log what you're doing! (${formatHour(currentHour)})`, { duration: 5000 });
+      }
+    };
+    check();
+    const interval = setInterval(check, 30000); // check every 30s
+    return () => clearInterval(interval);
+  }, [reminderOn]);
+
+  const toggleReminder = () => {
+    const next = !reminderOn;
+    setReminderOn(next);
+    localStorage.setItem("record_reminder", next ? "on" : "off");
+    if (next) {
+      playBeep();
+      toast.success("Hourly record reminder enabled");
+    } else {
+      toast.info("Hourly record reminder disabled");
+    }
+  };
 
   const handleDateChange = (newDate: Date) => {
     onSetDate(newDate);
@@ -138,6 +199,15 @@ export default function DailyRecord({ selectedDate, onSetDate }: DailyRecordProp
           </Button>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant={reminderOn ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={toggleReminder}
+          >
+            {reminderOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            {reminderOn ? "Reminder On" : "Reminder Off"}
+          </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportDSL}>
             <Copy className="h-4 w-4" /> Copy DSL
           </Button>
