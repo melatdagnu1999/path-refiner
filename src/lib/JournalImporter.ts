@@ -1,54 +1,92 @@
-// src/lib/journalImporter.ts
-
 import { parseJournalDSL } from "@/components/JournalParser";
 import { loadTasks, saveTasks } from "@/lib/taskStorage";
 import { Task } from "@/types/task";
 
-/**
- * Generate unique ID (safe for localStorage apps)
- */
 function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-/**
- * Import tasks from DSL and persist them
- */
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeDate(value: Date | string | undefined): string {
+  if (!value) return "";
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
+
+function taskSignature(task: Pick<Task, "scope" | "title" | "category" | "dueDate" | "startTime" | "endTime">): string {
+  return [
+    task.scope,
+    normalizeText(task.title),
+    task.category,
+    normalizeDate(task.dueDate),
+    task.startTime ?? "",
+    task.endTime ?? "",
+  ].join("::");
+}
+
+function dedupeTasks(tasks: Task[]): Task[] {
+  const deduped: Task[] = [];
+  const indexById = new Map<string, number>();
+  const indexBySignature = new Map<string, number>();
+
+  for (const task of tasks) {
+    const ensuredTask: Task = {
+      ...task,
+      id: task.id ?? generateId(),
+    };
+
+    const signature = taskSignature(ensuredTask);
+    const existingIndexById = indexById.get(ensuredTask.id);
+    const existingIndexBySignature = indexBySignature.get(signature);
+    const replaceIndex =
+      typeof existingIndexById === "number"
+        ? existingIndexById
+        : existingIndexBySignature;
+
+    if (typeof replaceIndex === "number") {
+      deduped[replaceIndex] = ensuredTask;
+      indexById.set(ensuredTask.id, replaceIndex);
+      indexBySignature.set(signature, replaceIndex);
+      continue;
+    }
+
+    const nextIndex = deduped.push(ensuredTask) - 1;
+    indexById.set(ensuredTask.id, nextIndex);
+    indexBySignature.set(signature, nextIndex);
+  }
+
+  return deduped;
+}
+
 export async function importDSL(dslText: string): Promise<Task[]> {
   if (!dslText || !dslText.trim()) {
     return [];
   }
 
-  // 1️⃣ Parse DSL
   const { tasks: parsedTasks } = parseJournalDSL(dslText);
 
   if (!parsedTasks || parsedTasks.length === 0) {
     return [];
   }
 
-  // 2️⃣ Ensure every task has an ID
-  const newTasks: Task[] = parsedTasks.map((task) => ({
-    ...task,
-    id: task.id ?? generateId(),
-  }));
-
-  // 3️⃣ Load existing tasks
+  const newTasks = dedupeTasks(parsedTasks);
   const existingTasks = await loadTasks();
 
-  // 4️⃣ Upsert: replace tasks with matching IDs only
-  const newTaskIds = new Set(newTasks.map((t) => t.id));
+  const newTaskIds = new Set(newTasks.map((task) => task.id));
+  const newTaskSignatures = new Set(newTasks.map((task) => taskSignature(task)));
 
-  const filteredTasks = existingTasks.filter(
-    (t) => !newTaskIds.has(t.id)
-  );
+  const filteredTasks = existingTasks.filter((task) => {
+    const hasMatchingId = newTaskIds.has(task.id);
+    const hasMatchingSignature = newTaskSignatures.has(taskSignature(task));
+    return !hasMatchingId && !hasMatchingSignature;
+  });
 
-  // 5️⃣ Combine
-  const combinedTasks = [...filteredTasks, ...newTasks];
+  const combinedTasks = dedupeTasks([...filteredTasks, ...newTasks]);
 
-  // 6️⃣ Persist
   await saveTasks(combinedTasks);
-
-  console.log("Tasks saved:", combinedTasks);
 
   return newTasks;
 }
