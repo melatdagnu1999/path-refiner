@@ -108,6 +108,39 @@ function exportToDSL(date: Date, entries: HourEntry[]): string {
 
 export default function DailyRecord({ selectedDate, onSetDate }: DailyRecordProps) {
   const [entries, setEntries] = useState<HourEntry[]>(() => loadEntries(selectedDate));
+  const [reminderOn, setReminderOn] = useState(() => localStorage.getItem("record_reminder") !== "off");
+  const lastBeepHourRef = useRef<number>(-1);
+
+  // Hourly beep reminder
+  useEffect(() => {
+    if (!reminderOn) return;
+    const check = () => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+      // Beep at the start of each hour (within first 1 minute)
+      if (currentMin < 1 && lastBeepHourRef.current !== currentHour) {
+        lastBeepHourRef.current = currentHour;
+        playBeep();
+        toast.info(`⏰ Time to log what you're doing! (${formatHour(currentHour)})`, { duration: 5000 });
+      }
+    };
+    check();
+    const interval = setInterval(check, 30000); // check every 30s
+    return () => clearInterval(interval);
+  }, [reminderOn]);
+
+  const toggleReminder = () => {
+    const next = !reminderOn;
+    setReminderOn(next);
+    localStorage.setItem("record_reminder", next ? "on" : "off");
+    if (next) {
+      playBeep();
+      toast.success("Hourly record reminder enabled");
+    } else {
+      toast.info("Hourly record reminder disabled");
+    }
+  };
 
   const handleDateChange = (newDate: Date) => {
     onSetDate(newDate);
