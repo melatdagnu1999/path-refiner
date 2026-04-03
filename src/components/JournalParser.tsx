@@ -147,7 +147,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 
       if (!index || !week || !monthlyRef || !monthlyMap[monthlyRef]) continue;
 
-      const id = crypto.randomUUID();
+      const id = deterministicId(`week::${title}::${week}`);
       weeklyMap[index] = id;
 
       const parentCategory = taskById[monthlyMap[monthlyRef]]?.category;
