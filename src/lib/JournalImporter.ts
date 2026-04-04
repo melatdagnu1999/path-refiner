@@ -61,6 +61,14 @@ function dedupeTasks(tasks: Task[]): Task[] {
   return deduped;
 }
 
+function mergeTasksKeepingLatest(existingTask: Task, incomingTask: Task): Task {
+  return {
+    ...existingTask,
+    ...incomingTask,
+    subTasks: incomingTask.subTasks,
+  };
+}
+
 export async function importDSL(dslText: string): Promise<Task[]> {
   if (!dslText || !dslText.trim()) {
     return [];
@@ -78,13 +86,21 @@ export async function importDSL(dslText: string): Promise<Task[]> {
   const newTaskIds = new Set(newTasks.map((task) => task.id));
   const newTaskSignatures = new Set(newTasks.map((task) => taskSignature(task)));
 
-  const filteredTasks = existingTasks.filter((task) => {
+  const existingById = new Map(existingTasks.map((task) => [task.id, task]));
+  const existingBySignature = new Map(existingTasks.map((task) => [taskSignature(task), task]));
+
+  const untouchedExistingTasks = existingTasks.filter((task) => {
     const hasMatchingId = newTaskIds.has(task.id);
     const hasMatchingSignature = newTaskSignatures.has(taskSignature(task));
     return !hasMatchingId && !hasMatchingSignature;
   });
 
-  const combinedTasks = dedupeTasks([...filteredTasks, ...newTasks]);
+  const mergedIncomingTasks = newTasks.map((task) => {
+    const existingMatch = existingById.get(task.id) ?? existingBySignature.get(taskSignature(task));
+    return existingMatch ? mergeTasksKeepingLatest(existingMatch, task) : task;
+  });
+
+  const combinedTasks = dedupeTasks([...untouchedExistingTasks, ...mergedIncomingTasks]);
 
   await saveTasks(combinedTasks);
 

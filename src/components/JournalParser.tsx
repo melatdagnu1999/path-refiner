@@ -284,7 +284,7 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 }
 
 interface JournalParserProps {
-  onImportTasks: (tasks: Task[]) => void;
+  onImportTasks: (tasks: Task[]) => void | Promise<void>;
 }
 
 export function JournalParser({ onImportTasks }: JournalParserProps) {
@@ -301,7 +301,7 @@ export function JournalParser({ onImportTasks }: JournalParserProps) {
 
   const handleImport = async () => {
     const imported = await importDSL(journal);
-    onImportTasks(imported);
+    await onImportTasks(imported);
     setJournal("");
     setPreview([]);
     setProgressReports([]);
