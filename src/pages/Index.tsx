@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { WeeklyCalendar } from "@/components/WeeklyCalendar";
 import { BalanceAnalytics } from "@/components/BalanceAnalytics";
-import { JournalParser } from "@/components/JournalParser";
+import { LifePlannerChat } from "@/components/LifePlannerChat";
 
 import Todo from "./Todo";
 import YearView from "./YearView";
@@ -173,7 +173,7 @@ const Index = () => {
                 </p>
               </div>
             </div>
-            <JournalParser onImportTasks={handleImportTasks} />
+            <LifePlannerChat onImportTasks={handleImportTasks} />
           </div>
         </div>
 
