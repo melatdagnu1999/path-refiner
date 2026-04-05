@@ -282,6 +282,7 @@ const Index = () => {
           <DailyRecord
             selectedDate={selectedDate}
             onSetDate={setSelectedDate}
+            tasks={tasks}
           />
         )}
 
