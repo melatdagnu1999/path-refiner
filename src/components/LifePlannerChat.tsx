@@ -151,6 +151,23 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
     toast.success(`Imported ${imported.length} tasks`);
     setPreview([]);
     setDetectedDSL(null);
+
+    // Auto-send daily check-in after import
+    const today = new Date().toISOString().split("T")[0];
+    const checkInMsg: Msg = {
+      role: "user",
+      content: `Tasks imported successfully for ${today}. Now let's do the daily check-in. Please ask me the 5 daily questions: mood, what went well, what to change, progress update, and how I'm doing with the plan. Also check my upcoming deadlines and suggest tasks for each goal for the coming week.`,
+    };
+    const updatedMsgs = [...messages, checkInMsg];
+    setMessages(updatedMsgs);
+    setIsLoading(true);
+    try {
+      await streamChat(updatedMsgs);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
