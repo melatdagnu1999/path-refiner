@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -107,12 +107,12 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
   const [reminderOn, setReminderOn] = useState(() => localStorage.getItem("record_reminder") !== "off");
   const lastBeepHourRef = useRef<number>(-1);
 
-  // AI Advisor state
-  const [advisorOpen, setAdvisorOpen] = useState(false);
+  // AI Advisor state — always visible as inline feedback
   const [advisorMessages, setAdvisorMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [advisorLoading, setAdvisorLoading] = useState(false);
   const [advisorInput, setAdvisorInput] = useState("");
   const advisorScrollRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     advisorScrollRef.current?.scrollTo({ top: advisorScrollRef.current.scrollHeight, behavior: "smooth" });
@@ -147,29 +147,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
   const handleDateChange = (newDate: Date) => {
     onSetDate(newDate);
     setEntries(loadEntries(newDate));
-  };
-
-  const updateEntry = (hour: number, field: "activity" | "category", value: string) => {
-    const updated = entries.map((e) => e.hour === hour ? { ...e, [field]: value } : e);
-    setEntries(updated);
-    saveEntries(selectedDate, updated);
-  };
-
-  const handleExportDSL = () => {
-    navigator.clipboard.writeText(exportToDSL(selectedDate, entries));
-    toast.success("DSL copied to clipboard!");
-  };
-
-  const handleDownloadDSL = () => {
-    const dsl = exportToDSL(selectedDate, entries);
-    const blob = new Blob([dsl], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `daily-record-${format(selectedDate, "yyyy-MM-dd")}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("DSL file downloaded!");
+    setAdvisorMessages([]);
   };
 
   // Get today's scheduled tasks
@@ -266,6 +244,64 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     }
   };
 
+  // Auto-trigger advisor when user logs an activity
+  const triggerAutoAdvice = useCallback((hour: number, activity: string, category: string) => {
+    if (!activity.trim()) return;
+
+    // Find what should be scheduled at this hour
+    const scheduledAtHour = scheduledTasks.find((t) => {
+      if (!t.startTime) return false;
+      const [sh] = t.startTime.split(":").map(Number);
+      const [eh] = (t.endTime || t.startTime).split(":").map(Number);
+      return hour >= sh && hour < (eh || sh + 1);
+    });
+
+    const hourLabel = formatHour(hour);
+    let autoMsg: string;
+
+    if (scheduledAtHour && activity.toLowerCase() !== scheduledAtHour.title.toLowerCase()) {
+      autoMsg = `At ${hourLabel} I recorded "${activity}" (${category}) but I was supposed to be doing "${scheduledAtHour.title}" (${scheduledAtHour.category}). Why am I doing something different? Should I switch? Advise me based on my routine and goals — help me be a better achiever with work-life balance.`;
+    } else if (scheduledAtHour) {
+      autoMsg = `At ${hourLabel} I'm doing "${activity}" (${category}) which matches my scheduled task "${scheduledAtHour.title}". Give me a quick motivational nudge and any tips to do it well. Help me stay on track toward my vision.`;
+    } else {
+      autoMsg = `At ${hourLabel} I recorded "${activity}" (${category}) and I have nothing scheduled at this time. Is this a good use of my time? How does it fit into my goals and work-life balance? Help me understand myself better and become a better achiever.`;
+    }
+
+    handleAskAdvisor(autoMsg);
+  }, [scheduledTasks, entries, dateStr]);
+
+  const updateEntry = (hour: number, field: "activity" | "category", value: string) => {
+    const updated = entries.map((e) => e.hour === hour ? { ...e, [field]: value } : e);
+    setEntries(updated);
+    saveEntries(selectedDate, updated);
+
+    // Auto-trigger AI advice after user finishes typing (debounce 1.5s)
+    if (field === "activity" && value.trim()) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      const entry = updated.find((e) => e.hour === hour)!;
+      debounceRef.current = setTimeout(() => {
+        triggerAutoAdvice(hour, value, entry.category);
+      }, 1500);
+    }
+  };
+
+  const handleExportDSL = () => {
+    navigator.clipboard.writeText(exportToDSL(selectedDate, entries));
+    toast.success("DSL copied to clipboard!");
+  };
+
+  const handleDownloadDSL = () => {
+    const dsl = exportToDSL(selectedDate, entries);
+    const blob = new Blob([dsl], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `daily-record-${format(selectedDate, "yyyy-MM-dd")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("DSL file downloaded!");
+  };
+
   const filledCount = entries.filter((e) => e.activity.trim()).length;
   const categorySummary: Record<string, number> = {};
   for (const e of entries) {
@@ -286,19 +322,6 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           </Button>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button
-            variant={advisorOpen ? "default" : "outline"}
-            size="sm"
-            className="gap-1.5"
-            onClick={() => {
-              setAdvisorOpen(!advisorOpen);
-              if (!advisorOpen && advisorMessages.length === 0) {
-                handleAskAdvisor("Analyze my day so far and tell me what I should be doing vs what I'm doing.");
-              }
-            }}
-          >
-            <Bot className="h-4 w-4" /> AI Advisor
-          </Button>
           <Button variant={reminderOn ? "default" : "outline"} size="sm" className="gap-1.5" onClick={toggleReminder}>
             {reminderOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
             {reminderOn ? "Reminder On" : "Reminder Off"}
@@ -312,19 +335,100 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         </div>
       </div>
 
-      {/* AI Advisor Panel */}
-      {advisorOpen && (
-        <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden">
-          <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between">
-            <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
-              <Bot className="h-4 w-4" /> Daily Routine Advisor
-            </span>
-            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setAdvisorOpen(false)}>Close</Button>
+      {/* Category summary */}
+      {filledCount > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(categorySummary).map(([cat, count]) => {
+            const info = CATEGORIES[cat as Category];
+            return (
+              <span key={cat} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                {info.icon} {info.label}: {count}h
+              </span>
+            );
+          })}
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+            Total: {filledCount}h logged
+          </span>
+        </div>
+      )}
+
+      {/* Two-column layout: hourly grid + AI advisor */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
+        {/* Hourly grid */}
+        <div className="bg-card rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-[100px_1fr_140px] md:grid-cols-[100px_1fr_160px] text-xs font-medium text-muted-foreground border-b border-border bg-muted/50">
+            <div className="px-3 py-2">Time</div>
+            <div className="px-3 py-2">Activity</div>
+            <div className="px-3 py-2">Category</div>
           </div>
-          <div ref={advisorScrollRef} className="max-h-[300px] overflow-y-auto px-3 py-2 space-y-2">
+          {HOURS.map((h) => {
+            const entry = entries.find((e) => e.hour === h)!;
+            const catInfo = CATEGORIES[entry.category];
+            const scheduledAtHour = scheduledTasks.find((t) => {
+              if (!t.startTime) return false;
+              const [sh] = t.startTime.split(":").map(Number);
+              const [eh] = (t.endTime || t.startTime).split(":").map(Number);
+              return h >= sh && h < (eh || sh + 1);
+            });
+
+            return (
+              <div
+                key={h}
+                className={`grid grid-cols-[100px_1fr_140px] md:grid-cols-[100px_1fr_160px] border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors ${
+                  scheduledAtHour && !entry.activity.trim() ? "bg-warning/5" : ""
+                }`}
+              >
+                <div className="px-3 py-2 text-sm font-mono text-muted-foreground flex flex-col justify-center">
+                  <span>{formatHour(h)}</span>
+                  {scheduledAtHour && (
+                    <span className="text-[10px] text-primary truncate" title={scheduledAtHour.title}>
+                      📋 {scheduledAtHour.title}
+                    </span>
+                  )}
+                </div>
+                <div className="px-2 py-1.5">
+                  <Input
+                    value={entry.activity}
+                    onChange={(e) => updateEntry(h, "activity", e.target.value)}
+                    placeholder={scheduledAtHour ? `Should be: ${scheduledAtHour.title}` : "What are you doing?"}
+                    className="h-8 text-sm border-transparent bg-transparent hover:border-input focus:border-input"
+                  />
+                </div>
+                <div className="px-2 py-1.5">
+                  <Select value={entry.category} onValueChange={(v) => updateEntry(h, "category", v)}>
+                    <SelectTrigger className="h-8 text-xs border-transparent bg-transparent hover:border-input">
+                      <SelectValue><span>{catInfo.icon} {catInfo.label}</span></SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(CATEGORIES).map(([key, val]) => (
+                        <SelectItem key={key} value={key} className="text-xs">{val.icon} {val.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* AI Advisor Panel — always visible on the side */}
+        <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden flex flex-col h-[600px] lg:h-auto lg:max-h-[calc(100vh-200px)] sticky top-24">
+          <div className="px-3 py-2 border-b border-primary/20">
+            <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+              <Bot className="h-4 w-4" /> AI Routine Advisor
+            </span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Auto-analyzes as you log activities</p>
+          </div>
+          <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+            {advisorMessages.length === 0 && !advisorLoading && (
+              <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+                <Bot className="h-6 w-6 mx-auto text-primary/40" />
+                <p>Start logging activities and I'll analyze your routine, compare with scheduled tasks, and give personalized advice.</p>
+              </div>
+            )}
             {advisorMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[90%] rounded-lg px-3 py-2 text-xs ${
+                <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
                   msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
                 }`}>
                   {msg.role === "assistant" ? (
@@ -350,7 +454,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
               value={advisorInput}
               onChange={(e) => setAdvisorInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskAdvisor(); } }}
-              placeholder="Ask about your routine, productivity, or time management..."
+              placeholder="Ask about your routine..."
               className="min-h-[36px] max-h-[80px] resize-none text-xs"
               rows={1}
             />
@@ -359,81 +463,6 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
             </Button>
           </div>
         </div>
-      )}
-
-      {/* Category summary */}
-      {filledCount > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(categorySummary).map(([cat, count]) => {
-            const info = CATEGORIES[cat as Category];
-            return (
-              <span key={cat} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
-                {info.icon} {info.label}: {count}h
-              </span>
-            );
-          })}
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-            Total: {filledCount}h logged
-          </span>
-        </div>
-      )}
-
-      {/* Hourly grid */}
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
-        <div className="grid grid-cols-[100px_1fr_140px] md:grid-cols-[100px_1fr_160px] text-xs font-medium text-muted-foreground border-b border-border bg-muted/50">
-          <div className="px-3 py-2">Time</div>
-          <div className="px-3 py-2">Activity</div>
-          <div className="px-3 py-2">Category</div>
-        </div>
-        {HOURS.map((h) => {
-          const entry = entries.find((e) => e.hour === h)!;
-          const catInfo = CATEGORIES[entry.category];
-          // Check if there's a scheduled task at this hour
-          const scheduledAtHour = scheduledTasks.find((t) => {
-            if (!t.startTime) return false;
-            const [sh] = t.startTime.split(":").map(Number);
-            const [eh] = (t.endTime || t.startTime).split(":").map(Number);
-            return h >= sh && h < (eh || sh + 1);
-          });
-
-          return (
-            <div
-              key={h}
-              className={`grid grid-cols-[100px_1fr_140px] md:grid-cols-[100px_1fr_160px] border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors ${
-                scheduledAtHour && !entry.activity.trim() ? "bg-warning/5" : ""
-              }`}
-            >
-              <div className="px-3 py-2 text-sm font-mono text-muted-foreground flex flex-col justify-center">
-                <span>{formatHour(h)}</span>
-                {scheduledAtHour && (
-                  <span className="text-[10px] text-primary truncate" title={scheduledAtHour.title}>
-                    📋 {scheduledAtHour.title}
-                  </span>
-                )}
-              </div>
-              <div className="px-2 py-1.5">
-                <Input
-                  value={entry.activity}
-                  onChange={(e) => updateEntry(h, "activity", e.target.value)}
-                  placeholder={scheduledAtHour ? `Should be: ${scheduledAtHour.title}` : "What are you doing?"}
-                  className="h-8 text-sm border-transparent bg-transparent hover:border-input focus:border-input"
-                />
-              </div>
-              <div className="px-2 py-1.5">
-                <Select value={entry.category} onValueChange={(v) => updateEntry(h, "category", v)}>
-                  <SelectTrigger className="h-8 text-xs border-transparent bg-transparent hover:border-input">
-                    <SelectValue><span>{catInfo.icon} {catInfo.label}</span></SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(CATEGORIES).map(([key, val]) => (
-                      <SelectItem key={key} value={key} className="text-xs">{val.icon} {val.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

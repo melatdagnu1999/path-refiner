@@ -197,13 +197,25 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
         {/* Chat messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
           {messages.length === 0 && (
-            <div className="text-center text-muted-foreground text-sm py-8 space-y-2">
-              <Sparkles className="h-8 w-8 mx-auto text-primary/50" />
-              <p className="font-medium">Your AI Life Planning Coach</p>
-              <p className="text-xs max-w-sm mx-auto">
-                Tell me about your life goals and I'll help you build a complete hierarchical plan
-                broken down into yearly → monthly → weekly → daily tasks.
-              </p>
+            <div className="text-muted-foreground text-sm py-6 space-y-4 px-2">
+              <div className="text-center space-y-2">
+                <Sparkles className="h-8 w-8 mx-auto text-primary/50" />
+                <p className="font-medium text-foreground">Your AI Life Planning Coach</p>
+                <p className="text-xs max-w-sm mx-auto">
+                  I'll guide you through building a complete life plan. Let's start with your yearly goals.
+                </p>
+              </div>
+              <div className="bg-muted rounded-lg p-3 space-y-2 text-xs">
+                <p className="font-semibold text-foreground">💡 To get started, tell me your Core Goals for the year:</p>
+                <p className="text-muted-foreground">Each goal needs a <strong>Title</strong>, <strong>Category</strong>, and <strong>Deadline</strong>. For example:</p>
+                <div className="bg-background rounded p-2 font-mono text-[11px] space-y-1 border border-border">
+                  <p>1. <strong>Complete my thesis</strong> — Category: Academic — Deadline: 2026-09-30</p>
+                  <p>2. <strong>Run a half marathon</strong> — Category: Fitness — Deadline: 2026-12-01</p>
+                  <p>3. <strong>Learn dressmaking basics</strong> — Category: Skills — Deadline: 2026-08-15</p>
+                  <p>4. <strong>Consistent spiritual routine</strong> — Category: Spiritual — Deadline: 2026-12-31</p>
+                </div>
+                <p className="text-muted-foreground italic">List as many goals as you have across all life areas (work, health, spiritual, relationships, skills, fun).</p>
+              </div>
             </div>
           )}
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TaskTimer } from "@/components/TaskTimer";
+import { TaskGuidance } from "@/components/TaskGuidance";
 import { DailyAdvice } from "@/components/DailyAdvice";
 import { GoogleCalendarSync } from "@/components/GoogleCalendarSync";
 import { format, isSameDay, addDays, subDays } from "date-fns";
@@ -41,12 +42,10 @@ export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onTo
   const [newEnd, setNewEnd] = useState("10:00");
   const [newTimer, setNewTimer] = useState("30");
 
-  // Get all daily tasks for today
   const allDayTasks = tasks.filter(
     (t) => t.scope === "day" && t.dueDate && isSameDay(new Date(t.dueDate), selectedDate)
   );
 
-  // Group by parent weekly task
   const weeklyParentIds = new Set<string>();
   allDayTasks.forEach((t) => {
     if (t.parentId) {
@@ -137,96 +136,100 @@ export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onTo
     const isEditing = editingId === task.id;
 
     return (
-      <Card key={task.id} className={`transition-all ${task.completed ? "opacity-60" : ""}`}>
-        <CardContent className="py-3 px-4">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-24 text-center">
-              {isEditing ? (
-                <div className="space-y-1">
-                  <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="text-xs h-7" />
-                  <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="text-xs h-7" />
-                </div>
-              ) : task.startTime && task.endTime ? (
-                <div className="bg-primary/10 rounded-md px-2 py-1">
-                  <div className="text-sm font-semibold text-primary">{task.startTime}</div>
-                  <div className="text-[10px] text-muted-foreground">to {task.endTime}</div>
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">No time</div>
-              )}
-            </div>
-
-            <Checkbox checked={task.completed} onCheckedChange={() => onToggleTask(task.id)} className="mt-1" />
-
-            <div className="flex-1 min-w-0">
-              {isEditing ? (
-                <div className="space-y-2">
-                  <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-7 text-sm" />
-                  <div className="flex flex-wrap gap-2">
-                    <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-7 w-40 text-xs" />
-                    <Select value={editCategory} onValueChange={(v) => setEditCategory(v as Category)}>
-                      <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(CATEGORIES).map(([key, val]) => (
-                          <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={editPriority} onValueChange={(v) => setEditPriority(v as "low" | "medium" | "high")}>
-                      <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(task)}><Check className="h-3.5 w-3.5" /></Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
+      <div key={task.id} className="space-y-0">
+        <Card className={`transition-all ${task.completed ? "opacity-60" : ""}`}>
+          <CardContent className="py-3 px-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-24 text-center">
+                {isEditing ? (
+                  <div className="space-y-1">
+                    <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="text-xs h-7" />
+                    <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="text-xs h-7" />
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{catInfo.icon}</span>
-                  <span className={`text-sm font-medium ${task.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                    {task.title}
-                  </span>
-                  <Badge variant="outline" className="text-xs">{task.priority}</Badge>
-                  {task.timerDuration && (
-                    <span className="text-[10px] text-muted-foreground">({task.timerDuration}m)</span>
-                  )}
-                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => startEdit(task)}>
-                    <Edit2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              )}
+                ) : task.startTime && task.endTime ? (
+                  <div className="bg-primary/10 rounded-md px-2 py-1">
+                    <div className="text-sm font-semibold text-primary">{task.startTime}</div>
+                    <div className="text-[10px] text-muted-foreground">to {task.endTime}</div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No time</div>
+                )}
+              </div>
 
-              {task.subTasks.length > 0 && (
-                <div className="mt-2 pl-7 space-y-1 border-l-2 border-border">
-                  {task.subTasks.map((st) => (
-                    <div key={st.id} className="flex items-center gap-2">
-                      <Checkbox checked={st.completed} onCheckedChange={() => onToggleSubTask(task.id, st.id)} className="h-3.5 w-3.5" />
-                      <span className={`text-xs ${st.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>{st.title}</span>
+              <Checkbox checked={task.completed} onCheckedChange={() => onToggleTask(task.id)} className="mt-1" />
+
+              <div className="flex-1 min-w-0">
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-7 text-sm" />
+                    <div className="flex flex-wrap gap-2">
+                      <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-7 w-40 text-xs" />
+                      <Select value={editCategory} onValueChange={(v) => setEditCategory(v as Category)}>
+                        <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(CATEGORIES).map(([key, val]) => (
+                            <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={editPriority} onValueChange={(v) => setEditPriority(v as "low" | "medium" | "high")}>
+                        <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(task)}><Check className="h-3.5 w-3.5" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{catInfo.icon}</span>
+                    <span className={`text-sm font-medium ${task.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                      {task.title}
+                    </span>
+                    <Badge variant="outline" className="text-xs">{task.priority}</Badge>
+                    {task.timerDuration && (
+                      <span className="text-[10px] text-muted-foreground">({task.timerDuration}m)</span>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => startEdit(task)}>
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
 
-              {task.timeSpent != null && task.timeSpent > 0 && (
-                <div className="mt-1 text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> {task.timeSpent}m recorded
-                </div>
+                {task.subTasks.length > 0 && (
+                  <div className="mt-2 pl-7 space-y-1 border-l-2 border-border">
+                    {task.subTasks.map((st) => (
+                      <div key={st.id} className="flex items-center gap-2">
+                        <Checkbox checked={st.completed} onCheckedChange={() => onToggleSubTask(task.id, st.id)} className="h-3.5 w-3.5" />
+                        <span className={`text-xs ${st.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>{st.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {task.timeSpent != null && task.timeSpent > 0 && (
+                  <div className="mt-1 text-[10px] text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> {task.timeSpent}m recorded
+                  </div>
+                )}
+              </div>
+
+              {task.timerDuration && !task.completed && (
+                <TaskTimer
+                  durationMinutes={task.timerDuration}
+                  onComplete={(secs) => onRecordTime(task.id, Math.round(secs / 60))}
+                />
               )}
             </div>
-
-            {task.timerDuration && !task.completed && (
-              <TaskTimer
-                durationMinutes={task.timerDuration}
-                onComplete={(secs) => onRecordTime(task.id, Math.round(secs / 60))}
-              />
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        {/* AI Task Guidance — only in Day View */}
+        <TaskGuidance task={task} allTasks={allTasks} />
+      </div>
     );
   };
 
@@ -309,7 +312,6 @@ export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onTo
         </Card>
       )}
 
-      {/* Tasks grouped by weekly parent */}
       {weeklyParents.map((wp) => {
         const children = getChildrenOfWeekly(wp.id);
         if (children.length === 0) return null;
@@ -329,7 +331,6 @@ export default function DayView({ tasks, allTasks, selectedDate, onSetDate, onTo
         );
       })}
 
-      {/* Standalone tasks */}
       {standaloneTasks.length > 0 && weeklyParents.length > 0 && (
         <h3 className="text-sm font-medium text-muted-foreground pt-2">Other Tasks</h3>
       )}

@@ -468,7 +468,7 @@ export function TaskSection({
                   </Button>
                 </div>
               </div>
-              <TaskGuidance task={task} allTasks={allTasks} />
+              {/* TaskGuidance moved to DayView only */}
 
               {addingBreakdownFor === task.id && childScope && (
                 <div className="flex gap-2 items-center ml-6 p-2 bg-muted/30 rounded border border-border flex-wrap">
