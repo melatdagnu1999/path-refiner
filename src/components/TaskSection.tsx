@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, ChevronDown, ChevronUp, Edit2, Check, X, GitBranch } from "lucide-react";
-import { TaskGuidance } from "./TaskGuidance";
+
 import { Progress } from "@/components/ui/progress";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -468,7 +468,7 @@ export function TaskSection({
                   </Button>
                 </div>
               </div>
-              <TaskGuidance task={task} allTasks={allTasks} />
+              {/* TaskGuidance moved to DayView only */}
 
               {addingBreakdownFor === task.id && childScope && (
                 <div className="flex gap-2 items-center ml-6 p-2 bg-muted/30 rounded border border-border flex-wrap">
