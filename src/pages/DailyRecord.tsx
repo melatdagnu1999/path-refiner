@@ -260,7 +260,10 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     }
   };
 
-  // Auto-trigger advisor when user logs an activity
+  // Keep ref to latest handleAskAdvisor for the reminder subscription
+  handleAskAdvisorRef.current = handleAskAdvisor;
+
+
   const triggerAutoAdvice = useCallback((hour: number, activity: string, category: string) => {
     if (!activity.trim()) return;
 
