@@ -432,11 +432,18 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
 
         {/* AI Advisor Panel — always visible on the side */}
         <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden flex flex-col h-[600px] lg:h-auto lg:max-h-[calc(100vh-200px)] sticky top-24">
-          <div className="px-3 py-2 border-b border-primary/20">
-            <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
-              <Bot className="h-4 w-4" /> AI Routine Advisor
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Auto-analyzes as you log activities</p>
+          <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
+            <div>
+              <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                <Bot className="h-4 w-4" /> AI Routine Advisor
+              </span>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Advice persists until you clear it</p>
+            </div>
+            {advisorMessages.length > 0 && (
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Clear advice" onClick={() => setAdvisorMessages([])}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
           <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
             {advisorMessages.length === 0 && !advisorLoading && (
