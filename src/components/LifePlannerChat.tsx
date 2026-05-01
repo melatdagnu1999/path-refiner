@@ -247,6 +247,23 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
                 </div>
                 <p className="text-muted-foreground italic">List as many goals as you have across all life areas (work, health, spiritual, relationships, skills, fun).</p>
               </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-foreground px-1">Quick commands:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {QUICK_COMMANDS.map((c) => (
+                    <Button
+                      key={c.label}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start text-left h-auto py-2 text-xs whitespace-normal"
+                      onClick={() => sendCommand(c.msg)}
+                    >
+                      {c.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
