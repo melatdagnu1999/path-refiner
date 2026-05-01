@@ -183,6 +183,31 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
     }
   };
 
+  const sendCommand = async (content: string) => {
+    if (isLoading) return;
+    const userMsg: Msg = { role: "user", content };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    setIsLoading(true);
+    setDetectedDSL(null);
+    setPreview([]);
+    setProgressReports([]);
+    try {
+      await streamChat(updated);
+    } catch (e) {
+      console.error(e); toast.error("Chat error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const QUICK_COMMANDS = [
+    { label: "🎯 Break down yearly goals", msg: "Let's start the 4-layer life planning interview. Begin by asking me to list my Core Goals for the year (each with Title, Category, Deadline in YYYY-MM-DD). Use this exact example format to show me what you want:\n1. Complete my thesis — Category: Academic — Deadline: 2026-09-30\n2. Run a half marathon — Category: Fitness — Deadline: 2026-12-01\nThen wait for my answer before moving to monthly outcomes." },
+    { label: "📋 Daily check-in", msg: "Let's do today's daily check-in. Ask me the 5 mandatory questions (mood, what went well yesterday, what to change, progress, current execution status), then analyze patterns, identify priorities for the next 3-7 days, point out neglected goal areas, and re-emit the full updated DSL." },
+    { label: "➕ Add task to confirmed plan", msg: "I want to add a new task to my confirmed plan. I'll describe it in my next message. After I tell you, integrate it into the existing hierarchy (don't restart the interview) and re-emit the COMPLETE updated DSL from scratch." },
+    { label: "🔄 Reschedule next week", msg: "Help me reschedule next week. Ask what changes I want, then re-emit the FULL updated DSL reflecting them." },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
