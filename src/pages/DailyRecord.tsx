@@ -139,6 +139,17 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     return () => clearInterval(interval);
   }, [reminderOn]);
 
+  // Subscribe to upcoming-task reminder events → auto-trigger advisor with focus guidance
+  const handleAskAdvisorRef = useRef<(msg?: string) => Promise<void>>();
+  useEffect(() => {
+    const unsub = onTaskReminderForAdvisor(({ task, minsUntil }) => {
+      const timeRange = task.endTime ? `${task.startTime}-${task.endTime}` : task.startTime || "";
+      const msg = `Reminder: my task "${task.title}" (${task.category}) starts in ${minsUntil} minutes (${timeRange}). In 3-5 short sentences, tell me how important this task is to my long-term goals, exactly how to focus on it, and how to avoid distractions during it. Be motivating and actionable.`;
+      handleAskAdvisorRef.current?.(msg);
+    });
+    return unsub;
+  }, []);
+
   const toggleReminder = () => {
     const next = !reminderOn;
     setReminderOn(next);
