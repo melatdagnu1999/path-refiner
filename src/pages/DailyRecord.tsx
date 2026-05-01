@@ -239,6 +239,8 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         })),
         date: dateStr,
         message: msg || undefined,
+        preferences: getPreferences(),
+        ...getAIContext(),
       });
     } catch (e) {
       console.error(e);
