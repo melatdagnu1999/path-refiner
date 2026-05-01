@@ -55,6 +55,9 @@ export default function Todo({ tasks, onToggleTask, onToggleSubTask, onAddTask, 
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState<Category>("personal");
   const [newPriority, setNewPriority] = useState<"low" | "medium" | "high">("medium");
+  const [suggestions, setSuggestions] = useState<Record<string, Suggestion | null>>({});
+  const [suggestLoading, setSuggestLoading] = useState<Record<string, boolean>>({});
+  const [excludeMap, setExcludeMap] = useState<Record<string, Suggestion[]>>({});
 
   const unplanned = getUnplannedTasks(tasks);
   const planned = getPlannedTasks(tasks);
@@ -74,6 +77,62 @@ export default function Todo({ tasks, onToggleTask, onToggleSubTask, onAddTask, 
     });
     setNewTitle("");
     setAdding(false);
+  };
+
+  const handleSuggest = async (task: Task, alternative = false) => {
+    setSuggestLoading((p) => ({ ...p, [task.id]: true }));
+    try {
+      const exclude = alternative ? (excludeMap[task.id] || []) : [];
+      const resp = await fetch(SUGGEST_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          task: { title: task.title, category: task.category, priority: task.priority, notes: "" },
+          allTasks: planned.map((t) => ({
+            scope: t.scope, title: t.title, category: t.category,
+            dueDate: t.dueDate instanceof Date ? t.dueDate.toISOString().split("T")[0] : String(t.dueDate).split("T")[0],
+            startTime: t.startTime, endTime: t.endTime,
+          })),
+          preferences: getPreferences(),
+          ...getAIContext(),
+          excludeSlots: exclude,
+        }),
+      });
+      if (!resp.ok) {
+        if (resp.status === 429) toast.error("Rate limited");
+        else if (resp.status === 402) toast.error("Credits exhausted");
+        else toast.error("Failed to suggest a plan");
+        return;
+      }
+      const data: Suggestion = await resp.json();
+      setSuggestions((p) => ({ ...p, [task.id]: data }));
+      setExcludeMap((p) => ({ ...p, [task.id]: alternative ? [...exclude, data] : [data] }));
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to suggest a plan");
+    } finally {
+      setSuggestLoading((p) => ({ ...p, [task.id]: false }));
+    }
+  };
+
+  const handleAcceptSuggestion = (task: Task) => {
+    const s = suggestions[task.id];
+    if (!s) return;
+    onUpdateTask({
+      ...task,
+      notes: undefined,
+      scope: "day",
+      priority: s.priority,
+      dueDate: new Date(`${s.date}T00:00:00`),
+      startTime: s.startTime,
+      endTime: s.endTime,
+    });
+    setSuggestions((p) => { const n = { ...p }; delete n[task.id]; return n; });
+    setExcludeMap((p) => { const n = { ...p }; delete n[task.id]; return n; });
+    toast.success(`Scheduled for ${s.date} ${s.startTime}-${s.endTime}`);
   };
 
   return (
