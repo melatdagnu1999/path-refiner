@@ -6,7 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Inbox, Trash2, X } from "lucide-react";
+import { Plus, Inbox, Trash2, X, Sparkles, Loader2, Check, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import { getPreferences } from "@/lib/preferences";
+import { getAIContext } from "@/lib/timezone";
+
+const SUGGEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/suggest-task-plan`;
+
+interface Suggestion {
+  date: string;
+  startTime: string;
+  endTime: string;
+  priority: "low" | "medium" | "high";
+  rationale: string;
+}
 
 interface TodoProps {
   tasks: Task[];
