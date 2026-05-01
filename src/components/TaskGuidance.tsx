@@ -97,7 +97,7 @@ export function TaskGuidance({ task, allTasks }: TaskGuidanceProps) {
     <div className="mt-2 border border-primary/20 rounded-lg p-3 bg-primary/5 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-primary flex items-center gap-1">
-          <Lightbulb className="h-3.5 w-3.5" /> AI Guidance
+          <Lightbulb className="h-3.5 w-3.5" /> {task.title}
         </span>
         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setOpen(false)}>
           <X className="h-3 w-3" />
