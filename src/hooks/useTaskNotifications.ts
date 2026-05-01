@@ -14,14 +14,21 @@ export type TimerNotificationEvent = {
 };
 
 const listeners = new Set<(e: TimerNotificationEvent) => void>();
+const advisorListeners = new Set<(e: TimerNotificationEvent) => void>();
 
 export function onTimerNotification(cb: (e: TimerNotificationEvent) => void) {
   listeners.add(cb);
   return () => { listeners.delete(cb); };
 }
 
+export function onTaskReminderForAdvisor(cb: (e: TimerNotificationEvent) => void) {
+  advisorListeners.add(cb);
+  return () => { advisorListeners.delete(cb); };
+}
+
 function emitTimerNotification(e: TimerNotificationEvent) {
   listeners.forEach((cb) => cb(e));
+  advisorListeners.forEach((cb) => cb(e));
 }
 
 function getSentSet(key: string): Set<string> {

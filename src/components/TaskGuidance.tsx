@@ -4,6 +4,8 @@ import { Task } from "@/types/task";
 import { Button } from "@/components/ui/button";
 import { Loader2, Lightbulb, X } from "lucide-react";
 import { toast } from "sonner";
+import { getPreferences } from "@/lib/preferences";
+import { getAIContext } from "@/lib/timezone";
 
 const GUIDANCE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/task-guidance`;
 
@@ -56,6 +58,8 @@ export function TaskGuidance({ task, allTasks }: TaskGuidanceProps) {
             category: t.category,
             completed: t.completed,
           })),
+          preferences: getPreferences(),
+          ...getAIContext(),
         }),
       });
 
