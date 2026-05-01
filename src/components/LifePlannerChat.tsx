@@ -347,6 +347,17 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
           )}
         </div>
 
+        {/* Quick commands strip */}
+        {messages.length > 0 && !isLoading && (
+          <div className="shrink-0 border-t border-border px-2 pt-2 flex gap-1 overflow-x-auto">
+            {QUICK_COMMANDS.map((c) => (
+              <Button key={c.label} variant="ghost" size="sm" className="text-[11px] h-7 px-2 shrink-0" onClick={() => sendCommand(c.msg)}>
+                {c.label}
+              </Button>
+            ))}
+          </div>
+        )}
+
         {/* Input area */}
         <div className="shrink-0 border-t border-border p-3 flex gap-2 items-end">
           <Textarea
