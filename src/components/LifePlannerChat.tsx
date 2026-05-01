@@ -14,6 +14,8 @@ import { Sparkles, Send, Loader2, FileText, Import, Eye } from "lucide-react";
 import { parseJournalDSL, ProgressReport } from "@/components/JournalParser";
 import { importDSL } from "@/lib/JournalImporter";
 import { toast } from "sonner";
+import { getPreferences } from "@/lib/preferences";
+import { getAIContext } from "@/lib/timezone";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/life-planner-chat`;
 
@@ -58,7 +60,11 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
       },
-      body: JSON.stringify({ messages: allMessages }),
+      body: JSON.stringify({
+        messages: allMessages,
+        preferences: getPreferences(),
+        ...getAIContext(),
+      }),
     });
 
     if (!resp.ok || !resp.body) {
@@ -177,6 +183,31 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
     }
   };
 
+  const sendCommand = async (content: string) => {
+    if (isLoading) return;
+    const userMsg: Msg = { role: "user", content };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    setIsLoading(true);
+    setDetectedDSL(null);
+    setPreview([]);
+    setProgressReports([]);
+    try {
+      await streamChat(updated);
+    } catch (e) {
+      console.error(e); toast.error("Chat error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const QUICK_COMMANDS = [
+    { label: "🎯 Break down yearly goals", msg: "Let's start the 4-layer life planning interview. Begin by asking me to list my Core Goals for the year (each with Title, Category, Deadline in YYYY-MM-DD). Use this exact example format to show me what you want:\n1. Complete my thesis — Category: Academic — Deadline: 2026-09-30\n2. Run a half marathon — Category: Fitness — Deadline: 2026-12-01\nThen wait for my answer before moving to monthly outcomes." },
+    { label: "📋 Daily check-in", msg: "Let's do today's daily check-in. Ask me the 5 mandatory questions (mood, what went well yesterday, what to change, progress, current execution status), then analyze patterns, identify priorities for the next 3-7 days, point out neglected goal areas, and re-emit the full updated DSL." },
+    { label: "➕ Add task to confirmed plan", msg: "I want to add a new task to my confirmed plan. I'll describe it in my next message. After I tell you, integrate it into the existing hierarchy (don't restart the interview) and re-emit the COMPLETE updated DSL from scratch." },
+    { label: "🔄 Reschedule next week", msg: "Help me reschedule next week. Ask what changes I want, then re-emit the FULL updated DSL reflecting them." },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -215,6 +246,23 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
                   <p>4. <strong>Consistent spiritual routine</strong> — Category: Spiritual — Deadline: 2026-12-31</p>
                 </div>
                 <p className="text-muted-foreground italic">List as many goals as you have across all life areas (work, health, spiritual, relationships, skills, fun).</p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-foreground px-1">Quick commands:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {QUICK_COMMANDS.map((c) => (
+                    <Button
+                      key={c.label}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start text-left h-auto py-2 text-xs whitespace-normal"
+                      onClick={() => sendCommand(c.msg)}
+                    >
+                      {c.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -298,6 +346,17 @@ export function LifePlannerChat({ onImportTasks }: LifePlannerChatProps) {
             </div>
           )}
         </div>
+
+        {/* Quick commands strip */}
+        {messages.length > 0 && !isLoading && (
+          <div className="shrink-0 border-t border-border px-2 pt-2 flex gap-1 overflow-x-auto">
+            {QUICK_COMMANDS.map((c) => (
+              <Button key={c.label} variant="ghost" size="sm" className="text-[11px] h-7 px-2 shrink-0" onClick={() => sendCommand(c.msg)}>
+                {c.label}
+              </Button>
+            ))}
+          </div>
+        )}
 
         {/* Input area */}
         <div className="shrink-0 border-t border-border p-3 flex gap-2 items-end">

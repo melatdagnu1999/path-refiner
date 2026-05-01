@@ -89,19 +89,40 @@ Rules you MUST obey:
 
    Step D — After check-in + advice + reminder, proceed with rescheduling and regenerating the FULL DSL from scratch (starting with ADD_CORE). The regenerated DSL must reflect any schedule changes discussed.
 
-   ABSOLUTE RULE: This daily flow is mandatory for EVERY message after plan confirmation. You must NEVER skip the daily questions. You must NEVER skip the priority analysis. You must NEVER skip the reminder.`;
+   ABSOLUTE RULE: This daily flow is mandatory for EVERY message after plan confirmation. You must NEVER skip the daily questions. You must NEVER skip the priority analysis. You must NEVER skip the reminder.
+
+6. POST-CONFIRMATION FLEXIBILITY (CRITICAL):
+   After CONFIRM FULL PLAN, the user is free to add new tasks, remove tasks, change deadlines, or shift schedules at any time using natural language (e.g. "add a dentist appointment Thursday at 3pm", "I want to add learning Spanish to my goals", "move thesis writing to mornings").
+   When the user does this, you MUST:
+     - Acknowledge briefly what is changing
+     - Integrate the change into the existing hierarchy (do NOT restart the full interview)
+     - Re-emit the COMPLETE updated DSL from scratch (ADD_CORE → ADD_MONTHLY → ADD_WEEKLY → ADD_SUBTASK_DAILY) reflecting the change
+     - Then continue with the normal daily check-in flow on the next user message`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages } = await req.json();
+    const { messages, preferences, timezone, todayLocal } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const today = new Date().toISOString().split("T")[0];
-    const systemContent = SYSTEM_PROMPT.replace("TODAY_DATE_PLACEHOLDER", today);
+    const today = todayLocal || new Date().toISOString().split("T")[0];
+    let prefBlock = "";
+    if (preferences) {
+      const p = preferences;
+      const lines: string[] = [];
+      if (p.motivationStyle) lines.push(`- Motivation style: ${p.motivationStyle}`);
+      if (p.favoriteBooks) lines.push(`- Favorite books: ${p.favoriteBooks}`);
+      if (p.studyInterests) lines.push(`- Study interests: ${p.studyInterests}`);
+      if (p.sports) lines.push(`- Sports: ${p.sports}`);
+      if (p.spiritualPreference) lines.push(`- Spiritual preference: ${p.spiritualPreference}`);
+      if (p.hobbies) lines.push(`- Hobbies: ${p.hobbies}`);
+      if (lines.length) prefBlock = `\n\nUSER PREFERENCES (use to deeply personalize motivation, examples, and scheduling):\n${lines.join("\n")}\n`;
+    }
+    const tzBlock = timezone ? `\nUser timezone: ${timezone}. All dates/times must be in this timezone.\n` : "";
+    const systemContent = SYSTEM_PROMPT.replace("TODAY_DATE_PLACEHOLDER", today) + tzBlock + prefBlock;
 
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",

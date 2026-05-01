@@ -11,13 +11,28 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
-    const { entries, scheduledTasks, date, message } = await req.json();
+    const { entries, scheduledTasks, date, message, preferences, timezone, todayLocal } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    let prefBlock = "";
+    if (preferences) {
+      const p = preferences;
+      const lines: string[] = [];
+      if (p.motivationStyle) lines.push(`- Motivation style: ${p.motivationStyle}`);
+      if (p.favoriteBooks) lines.push(`- Favorite books: ${p.favoriteBooks}`);
+      if (p.studyInterests) lines.push(`- Study interests: ${p.studyInterests}`);
+      if (p.sports) lines.push(`- Sports: ${p.sports}`);
+      if (p.spiritualPreference) lines.push(`- Spiritual: ${p.spiritualPreference}`);
+      if (p.hobbies) lines.push(`- Hobbies: ${p.hobbies}`);
+      if (lines.length) prefBlock = `\n\nUSER PREFERENCES (use to personalize advice):\n${lines.join("\n")}\n`;
+    }
+
     const systemPrompt = `You are an AI daily routine advisor and accountability partner. You analyze what the user IS doing vs what they SHOULD be doing based on their scheduled tasks.
 
-Today's date: ${date}
+Today's date: ${todayLocal || date}
+Timezone: ${timezone || "UTC"}
+${prefBlock}
 
 Your job:
 1. Compare the user's actual activities (from their daily record) with their scheduled tasks

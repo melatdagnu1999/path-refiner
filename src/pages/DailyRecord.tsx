@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { getPreferences } from "@/lib/preferences";
+import { getAIContext } from "@/lib/timezone";
+import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
 
 function playBeep() {
   try {
@@ -136,6 +139,17 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     return () => clearInterval(interval);
   }, [reminderOn]);
 
+  // Subscribe to upcoming-task reminder events → auto-trigger advisor with focus guidance
+  const handleAskAdvisorRef = useRef<(msg?: string) => Promise<void>>();
+  useEffect(() => {
+    const unsub = onTaskReminderForAdvisor(({ task, minsUntil }) => {
+      const timeRange = task.endTime ? `${task.startTime}-${task.endTime}` : task.startTime || "";
+      const msg = `Reminder: my task "${task.title}" (${task.category}) starts in ${minsUntil} minutes (${timeRange}). In 3-5 short sentences, tell me how important this task is to my long-term goals, exactly how to focus on it, and how to avoid distractions during it. Be motivating and actionable.`;
+      handleAskAdvisorRef.current?.(msg);
+    });
+    return unsub;
+  }, []);
+
   const toggleReminder = () => {
     const next = !reminderOn;
     setReminderOn(next);
@@ -236,6 +250,8 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         })),
         date: dateStr,
         message: msg || undefined,
+        preferences: getPreferences(),
+        ...getAIContext(),
       });
     } catch (e) {
       console.error(e);
@@ -244,7 +260,10 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     }
   };
 
-  // Auto-trigger advisor when user logs an activity
+  // Keep ref to latest handleAskAdvisor for the reminder subscription
+  handleAskAdvisorRef.current = handleAskAdvisor;
+
+
   const triggerAutoAdvice = useCallback((hour: number, activity: string, category: string) => {
     if (!activity.trim()) return;
 
@@ -413,11 +432,18 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
 
         {/* AI Advisor Panel — always visible on the side */}
         <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden flex flex-col h-[600px] lg:h-auto lg:max-h-[calc(100vh-200px)] sticky top-24">
-          <div className="px-3 py-2 border-b border-primary/20">
-            <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
-              <Bot className="h-4 w-4" /> AI Routine Advisor
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Auto-analyzes as you log activities</p>
+          <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
+            <div>
+              <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                <Bot className="h-4 w-4" /> AI Routine Advisor
+              </span>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Advice persists until you clear it</p>
+            </div>
+            {advisorMessages.length > 0 && (
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Clear advice" onClick={() => setAdvisorMessages([])}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
           <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
             {advisorMessages.length === 0 && !advisorLoading && (
