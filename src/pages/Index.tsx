@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Settings,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import YearView from "./YearView";
 import MonthView from "./MonthView";
 import DayView from "./DayView";
 import DailyRecord from "./DailyRecord";
+import Preferences from "./Preferences";
 
 import { Task } from "@/types/task";
 import {
@@ -33,7 +35,7 @@ import {
 import { useTaskNotifications } from "@/hooks/useTaskNotifications";
 import { FloatingTimer } from "@/components/FloatingTimer";
 
-type View = "todo" | "year" | "month" | "week" | "day" | "record" | "analytics";
+type View = "todo" | "year" | "month" | "week" | "day" | "record" | "analytics" | "preferences";
 
 const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "todo", label: "Todo Hub", icon: <ListTodo className="h-4 w-4" /> },
@@ -43,6 +45,7 @@ const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "day", label: "Day", icon: <Sun className="h-4 w-4" /> },
   { view: "record", label: "Record", icon: <ClipboardList className="h-4 w-4" /> },
   { view: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+  { view: "preferences", label: "Preferences", icon: <Settings className="h-4 w-4" /> },
 ];
 
 const Index = () => {
@@ -289,6 +292,8 @@ const Index = () => {
         {view === "analytics" && (
           <BalanceAnalytics tasks={tasks} />
         )}
+
+        {view === "preferences" && <Preferences />}
       </main>
 
       <FloatingTimer onRecordTime={handleRecordTime} />
