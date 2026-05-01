@@ -14,6 +14,8 @@ import { Sparkles, Send, Loader2, FileText, Import, Eye } from "lucide-react";
 import { parseJournalDSL, ProgressReport } from "@/components/JournalParser";
 import { importDSL } from "@/lib/JournalImporter";
 import { toast } from "sonner";
+import { getPreferences } from "@/lib/preferences";
+import { getAIContext } from "@/lib/timezone";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/life-planner-chat`;
 
