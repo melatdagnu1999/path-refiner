@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { getPreferences } from "@/lib/preferences";
+import { getAIContext } from "@/lib/timezone";
+import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
 
 function playBeep() {
   try {
