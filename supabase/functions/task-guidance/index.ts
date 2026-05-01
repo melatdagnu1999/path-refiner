@@ -11,18 +11,33 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
-    const { task, allTasks, memoryContext } = await req.json();
+    const { task, allTasks, memoryContext, preferences, timezone, todayLocal } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayLocal || new Date().toISOString().split("T")[0];
+
+    let prefBlock = "";
+    if (preferences) {
+      const p = preferences;
+      const lines: string[] = [];
+      if (p.motivationStyle) lines.push(`- Motivation style: ${p.motivationStyle}`);
+      if (p.favoriteBooks) lines.push(`- Favorite books: ${p.favoriteBooks}`);
+      if (p.studyInterests) lines.push(`- Study interests: ${p.studyInterests}`);
+      if (p.sports) lines.push(`- Sports: ${p.sports}`);
+      if (p.spiritualPreference) lines.push(`- Spiritual: ${p.spiritualPreference}`);
+      if (p.hobbies) lines.push(`- Hobbies: ${p.hobbies}`);
+      if (lines.length) prefBlock = `\nUSER PREFERENCES:\n${lines.join("\n")}\n`;
+    }
 
     const systemPrompt = `You are an AI executive function assistant that provides deeply personalized task guidance.
 You classify tasks and create a FULL actionable step-by-step plan.
 
-Today's date: ${today}
+Today's date: ${today} (timezone: ${timezone || "UTC"})
+${prefBlock}
+${memoryContext || ""}
 
-${memoryContext || "No prior context available."}
+CRITICAL: NEVER ask the user to confirm whether they still need help with an overdue task. NEVER output text like "the due date has already passed, please confirm". Instead, if the task is overdue, just guide them on how to do it now or how to adapt — be actionable, not interrogative.
 
 Categories: deep_work, study, spiritual, fitness, admin, calls, research, writing, reading, social, recovery, motivation
 
