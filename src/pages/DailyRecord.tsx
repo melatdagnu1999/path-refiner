@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2, CalendarPlus, FileText, Check, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getPreferences } from "@/lib/preferences";
 import { getAIContext } from "@/lib/timezone";
 import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
+import { parseJournalDSL } from "@/components/JournalParser";
+import { importDSL } from "@/lib/JournalImporter";
+import { loadTasks } from "@/lib/taskStorage";
 
 function playBeep() {
   try {
@@ -82,6 +91,29 @@ function saveEntries(date: Date, entries: HourEntry[]) {
   localStorage.setItem(getStorageKey(date), JSON.stringify(entries));
 }
 
+/** Load recent daily records from localStorage for AI routine learning */
+function loadRecordHistory(currentDate: Date, days: number = 7): { date: string; entries: { hour: number; activity: string; category: string }[] }[] {
+  const history: { date: string; entries: { hour: number; activity: string; category: string }[] }[] = [];
+  for (let i = 1; i <= days; i++) {
+    const d = subDays(currentDate, i);
+    const key = getStorageKey(d);
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as HourEntry[];
+        const filled = parsed.filter((e) => e.activity.trim());
+        if (filled.length > 0) {
+          history.push({
+            date: format(d, "yyyy-MM-dd"),
+            entries: filled.map((e) => ({ hour: e.hour, activity: e.activity, category: e.category })),
+          });
+        }
+      }
+    } catch {}
+  }
+  return history;
+}
+
 function exportToDSL(date: Date, entries: HourEntry[]): string {
   const dateStr = format(date, "yyyy-MM-dd");
   const lines: string[] = [`# Daily Record — ${format(date, "EEEE, MMM d, yyyy")}`, ""];
@@ -110,12 +142,19 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
   const [reminderOn, setReminderOn] = useState(() => localStorage.getItem("record_reminder") !== "off");
   const lastBeepHourRef = useRef<number>(-1);
 
-  // AI Advisor state — always visible as inline feedback
+  // AI Advisor state
   const [advisorMessages, setAdvisorMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [advisorLoading, setAdvisorLoading] = useState(false);
   const [advisorInput, setAdvisorInput] = useState("");
   const advisorScrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Plan generation state
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
+  const [generatedDSL, setGeneratedDSL] = useState("");
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [planPreview, setPlanPreview] = useState<Task[]>([]);
+  const [planParsed, setPlanParsed] = useState(false);
 
   useEffect(() => {
     advisorScrollRef.current?.scrollTo({ top: advisorScrollRef.current.scrollHeight, behavior: "smooth" });
@@ -139,7 +178,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     return () => clearInterval(interval);
   }, [reminderOn]);
 
-  // Subscribe to upcoming-task reminder events → auto-trigger advisor with focus guidance
+  // Subscribe to upcoming-task reminder events
   const handleAskAdvisorRef = useRef<(msg?: string) => Promise<void>>();
   useEffect(() => {
     const unsub = onTaskReminderForAdvisor(({ task, minsUntil }) => {
@@ -164,7 +203,6 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     setAdvisorMessages([]);
   };
 
-  // Get today's scheduled tasks
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const scheduledTasks = tasks.filter((t) => {
     if (t.scope !== "day") return false;
@@ -173,7 +211,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     } catch { return false; }
   });
 
-  const streamAdvisor = async (body: any) => {
+  const streamFromAdvisor = async (body: any, onChunk: (chunk: string) => void) => {
     const resp = await fetch(ADVISOR_URL, {
       method: "POST",
       headers: {
@@ -186,25 +224,14 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     if (!resp.ok || !resp.body) {
       if (resp.status === 429) { toast.error("Rate limited"); return; }
       if (resp.status === 402) { toast.error("Credits exhausted"); return; }
-      toast.error("Failed to get advice"); return;
+      toast.error("Failed to get response"); return;
     }
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let textBuffer = "";
-    let assistantSoFar = "";
-
-    const upsert = (chunk: string) => {
-      assistantSoFar += chunk;
-      setAdvisorMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant")
-          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
-        return [...prev, { role: "assistant", content: assistantSoFar }];
-      });
-    };
-
     let streamDone = false;
+
     while (!streamDone) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -221,13 +248,27 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         try {
           const parsed = JSON.parse(jsonStr);
           const content = parsed.choices?.[0]?.delta?.content;
-          if (content) upsert(content);
+          if (content) onChunk(content);
         } catch {
           textBuffer = line + "\n" + textBuffer;
           break;
         }
       }
     }
+  };
+
+  const streamAdvisor = async (body: any) => {
+    let assistantSoFar = "";
+    const upsert = (chunk: string) => {
+      assistantSoFar += chunk;
+      setAdvisorMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant")
+          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+        return [...prev, { role: "assistant", content: assistantSoFar }];
+      });
+    };
+    await streamFromAdvisor(body, upsert);
   };
 
   const handleAskAdvisor = async (customMsg?: string) => {
@@ -238,19 +279,18 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
       setAdvisorInput("");
     }
 
+    const recordHistory = loadRecordHistory(selectedDate, 7);
+
     try {
       await streamAdvisor({
         entries: entries.filter((e) => e.activity.trim()),
         scheduledTasks: scheduledTasks.map((t) => ({
-          title: t.title,
-          category: t.category,
-          startTime: t.startTime,
-          endTime: t.endTime,
-          completed: t.completed,
+          title: t.title, category: t.category, startTime: t.startTime, endTime: t.endTime, completed: t.completed,
         })),
         date: dateStr,
         message: msg || undefined,
         preferences: getPreferences(),
+        recordHistory,
         ...getAIContext(),
       });
     } catch (e) {
@@ -260,14 +300,10 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     }
   };
 
-  // Keep ref to latest handleAskAdvisor for the reminder subscription
   handleAskAdvisorRef.current = handleAskAdvisor;
-
 
   const triggerAutoAdvice = useCallback((hour: number, activity: string, category: string) => {
     if (!activity.trim()) return;
-
-    // Find what should be scheduled at this hour
     const scheduledAtHour = scheduledTasks.find((t) => {
       if (!t.startTime) return false;
       const [sh] = t.startTime.split(":").map(Number);
@@ -293,8 +329,6 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     const updated = entries.map((e) => e.hour === hour ? { ...e, [field]: value } : e);
     setEntries(updated);
     saveEntries(selectedDate, updated);
-
-    // Auto-trigger AI advice after user finishes typing (debounce 1.5s)
     if (field === "activity" && value.trim()) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       const entry = updated.find((e) => e.hour === hour)!;
@@ -321,6 +355,70 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     toast.success("DSL file downloaded!");
   };
 
+  // Generate daily plan via AI
+  const handleGeneratePlan = async () => {
+    setGeneratingPlan(true);
+    setGeneratedDSL("");
+    setPlanPreview([]);
+    setPlanParsed(false);
+    setPlanDialogOpen(true);
+
+    const recordHistory = loadRecordHistory(selectedDate, 14); // 2 weeks of history
+    const allTasks = await loadTasks();
+
+    let dslSoFar = "";
+    try {
+      await streamFromAdvisor({
+        entries: entries.filter((e) => e.activity.trim()),
+        scheduledTasks: scheduledTasks.map((t) => ({
+          title: t.title, category: t.category, startTime: t.startTime, endTime: t.endTime, completed: t.completed, progress: t.progress,
+        })),
+        date: dateStr,
+        generatePlan: true,
+        preferences: getPreferences(),
+        recordHistory,
+        existingTasks: allTasks.map((t) => ({
+          scope: t.scope, title: t.title, category: t.category, completed: t.completed, progress: t.progress,
+        })),
+        ...getAIContext(),
+      }, (chunk) => {
+        dslSoFar += chunk;
+        setGeneratedDSL(dslSoFar);
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate plan");
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
+  const handleParsePlan = () => {
+    // Strip any markdown fencing the AI might have added
+    let cleanDSL = generatedDSL.trim();
+    cleanDSL = cleanDSL.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "");
+    const { tasks: parsed } = parseJournalDSL(cleanDSL);
+    setPlanPreview(parsed);
+    setPlanParsed(true);
+    if (parsed.length === 0) toast.warning("No valid tasks found in generated DSL");
+  };
+
+  const handleImportPlan = async () => {
+    let cleanDSL = generatedDSL.trim();
+    cleanDSL = cleanDSL.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "");
+    try {
+      const imported = await importDSL(cleanDSL);
+      toast.success(`Imported ${imported.length} tasks from generated plan`);
+      setPlanDialogOpen(false);
+      setGeneratedDSL("");
+      setPlanPreview([]);
+      setPlanParsed(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to import plan");
+    }
+  };
+
   const filledCount = entries.filter((e) => e.activity.trim()).length;
   const categorySummary: Record<string, number> = {};
   for (const e of entries) {
@@ -341,6 +439,10 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           </Button>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="default" size="sm" className="gap-1.5" onClick={handleGeneratePlan} disabled={generatingPlan}>
+            {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
+            Generate Plan
+          </Button>
           <Button variant={reminderOn ? "default" : "outline"} size="sm" className="gap-1.5" onClick={toggleReminder}>
             {reminderOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
             {reminderOn ? "Reminder On" : "Reminder Off"}
@@ -430,7 +532,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           })}
         </div>
 
-        {/* AI Advisor Panel — always visible on the side */}
+        {/* AI Advisor Panel */}
         <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden flex flex-col h-[600px] lg:h-auto lg:max-h-[calc(100vh-200px)] sticky top-24">
           <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
             <div>
@@ -490,6 +592,71 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           </div>
         </div>
       </div>
+
+      {/* Plan Generation Dialog */}
+      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5" />
+              AI-Generated Daily Plan
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Generated DSL output */}
+            <div className="relative">
+              <Textarea
+                value={generatedDSL}
+                onChange={(e) => { setGeneratedDSL(e.target.value); setPlanParsed(false); setPlanPreview([]); }}
+                placeholder={generatingPlan ? "Generating your personalized plan..." : "DSL will appear here..."}
+                className="min-h-[200px] font-mono text-xs"
+                readOnly={generatingPlan}
+              />
+              {generatingPlan && (
+                <div className="absolute top-2 right-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 flex-wrap">
+              <Button variant="outline" onClick={handleParsePlan} disabled={generatingPlan || !generatedDSL.trim()}>
+                <FileText className="h-4 w-4 mr-1.5" />
+                Parse & Preview
+              </Button>
+              {planParsed && planPreview.length > 0 && (
+                <Button onClick={handleImportPlan}>
+                  <Check className="h-4 w-4 mr-1.5" />
+                  Import {planPreview.length} tasks
+                </Button>
+              )}
+              {planParsed && planPreview.length === 0 && (
+                <span className="text-sm text-destructive flex items-center gap-1">
+                  <X className="h-4 w-4" /> No valid tasks parsed — try regenerating
+                </span>
+              )}
+            </div>
+
+            {/* Preview */}
+            {planPreview.length > 0 && (
+              <div className="space-y-1 max-h-[300px] overflow-y-auto border rounded-lg p-3 bg-muted/30">
+                <p className="text-sm font-semibold mb-2">Preview ({planPreview.length} tasks):</p>
+                {planPreview.map((t) => (
+                  <div key={t.id} className="text-xs flex gap-2 items-center py-0.5">
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] shrink-0">{t.scope}</span>
+                    <span className="text-muted-foreground shrink-0">{t.category}</span>
+                    {t.startTime && <span className="text-muted-foreground shrink-0">{t.startTime}-{t.endTime}</span>}
+                    <span className="font-medium truncate">{t.title}</span>
+                    {t.timerDuration && <span className="text-muted-foreground shrink-0">({t.timerDuration}m)</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
