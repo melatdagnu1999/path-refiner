@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2, CalendarPlus, FileText, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2, CalendarPlus } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
