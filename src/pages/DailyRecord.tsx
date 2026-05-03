@@ -149,12 +149,12 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
   const advisorScrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Plan generation state
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [generatedDSL, setGeneratedDSL] = useState("");
-  const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [planPreview, setPlanPreview] = useState<Task[]>([]);
-  const [planParsed, setPlanParsed] = useState(false);
+  // Plan conversation state
+  const [planMode, setPlanMode] = useState(false);
+  const [planMessages, setPlanMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planInput, setPlanInput] = useState("");
+  const planScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     advisorScrollRef.current?.scrollTo({ top: advisorScrollRef.current.scrollHeight, behavior: "smooth" });
