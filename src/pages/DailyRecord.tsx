@@ -359,18 +359,16 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     toast.success("DSL file downloaded!");
   };
 
-  // Generate daily plan via AI
+  // Start plan conversation
   const handleGeneratePlan = async () => {
-    setGeneratingPlan(true);
-    setGeneratedDSL("");
-    setPlanPreview([]);
-    setPlanParsed(false);
-    setPlanDialogOpen(true);
+    setPlanMode(true);
+    setPlanMessages([]);
+    setPlanLoading(true);
 
-    const recordHistory = loadRecordHistory(selectedDate, 14); // 2 weeks of history
+    const recordHistory = loadRecordHistory(selectedDate, 14);
     const allTasks = await loadTasks();
 
-    let dslSoFar = "";
+    let assistantSoFar = "";
     try {
       await streamFromAdvisor({
         entries: entries.filter((e) => e.activity.trim()),
@@ -386,40 +384,78 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         })),
         ...getAIContext(),
       }, (chunk) => {
-        dslSoFar += chunk;
-        setGeneratedDSL(dslSoFar);
+        assistantSoFar += chunk;
+        setPlanMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
       });
     } catch (e) {
       console.error(e);
-      toast.error("Failed to generate plan");
+      toast.error("Failed to start plan conversation");
     } finally {
-      setGeneratingPlan(false);
+      setPlanLoading(false);
     }
   };
 
-  const handleParsePlan = () => {
-    // Strip any markdown fencing the AI might have added
-    let cleanDSL = generatedDSL.trim();
-    cleanDSL = cleanDSL.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "");
-    const { tasks: parsed } = parseJournalDSL(cleanDSL);
-    setPlanPreview(parsed);
-    setPlanParsed(true);
-    if (parsed.length === 0) toast.warning("No valid tasks found in generated DSL");
-  };
+  // Continue plan conversation
+  const handlePlanChat = async (customMsg?: string) => {
+    const msg = customMsg || planInput.trim();
+    if (!msg) return;
+    setPlanLoading(true);
+    const updatedMessages = [...planMessages, { role: "user" as const, content: msg }];
+    setPlanMessages(updatedMessages);
+    setPlanInput("");
 
-  const handleImportPlan = async () => {
-    let cleanDSL = generatedDSL.trim();
-    cleanDSL = cleanDSL.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "");
+    const recordHistory = loadRecordHistory(selectedDate, 14);
+    const allTasks = await loadTasks();
+
+    let assistantSoFar = "";
     try {
-      const imported = await importDSL(cleanDSL);
-      toast.success(`Imported ${imported.length} tasks from generated plan`);
-      setPlanDialogOpen(false);
-      setGeneratedDSL("");
-      setPlanPreview([]);
-      setPlanParsed(false);
+      await streamFromAdvisor({
+        entries: entries.filter((e) => e.activity.trim()),
+        scheduledTasks: scheduledTasks.map((t) => ({
+          title: t.title, category: t.category, startTime: t.startTime, endTime: t.endTime, completed: t.completed, progress: t.progress,
+        })),
+        date: dateStr,
+        generatePlan: true,
+        conversationHistory: updatedMessages,
+        message: msg,
+        preferences: getPreferences(),
+        recordHistory,
+        existingTasks: allTasks.map((t) => ({
+          id: t.id, scope: t.scope, title: t.title, category: t.category, completed: t.completed, progress: t.progress, parentId: t.parentId, dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : undefined, startTime: t.startTime, endTime: t.endTime,
+        })),
+        ...getAIContext(),
+      }, (chunk) => {
+        assistantSoFar += chunk;
+        setPlanMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
+      });
+
+      // Check if the response contains DSL block — auto-import
+      const fullResponse = assistantSoFar;
+      const dslMatch = fullResponse.match(/~~~dsl\n([\s\S]*?)~~~/);
+      if (dslMatch) {
+        const dslContent = dslMatch[1].trim();
+        try {
+          const imported = await importDSL(dslContent);
+          if (imported.length > 0) {
+            toast.success(`✅ ${imported.length} tasks added to your schedule!`);
+          }
+        } catch (e) {
+          console.error("Auto-import failed:", e);
+        }
+      }
     } catch (e) {
       console.error(e);
-      toast.error("Failed to import plan");
+      toast.error("Failed to continue conversation");
+    } finally {
+      setPlanLoading(false);
     }
   };
 
