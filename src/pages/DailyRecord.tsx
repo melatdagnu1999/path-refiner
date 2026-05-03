@@ -378,7 +378,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         preferences: getPreferences(),
         recordHistory,
         existingTasks: allTasks.map((t) => ({
-          scope: t.scope, title: t.title, category: t.category, completed: t.completed, progress: t.progress,
+          id: t.id, scope: t.scope, title: t.title, category: t.category, completed: t.completed, progress: t.progress, parentId: t.parentId, dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : undefined, startTime: t.startTime, endTime: t.endTime,
         })),
         ...getAIContext(),
       }, (chunk) => {
