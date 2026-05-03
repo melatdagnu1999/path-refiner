@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { getPreferences } from "@/lib/preferences";
 import { getAIContext } from "@/lib/timezone";
 import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
-import { parseJournalDSL } from "@/components/JournalParser";
+
 import { importDSL } from "@/lib/JournalImporter";
 import { loadTasks } from "@/lib/taskStorage";
 
