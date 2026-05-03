@@ -68,7 +68,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
-    const { entries, scheduledTasks, date, message, preferences, timezone, todayLocal, generatePlan, existingTasks, recordHistory } = await req.json();
+    const { entries, scheduledTasks, date, message, preferences, timezone, todayLocal, generatePlan, existingTasks, recordHistory, conversationHistory } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
