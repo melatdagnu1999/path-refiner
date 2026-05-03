@@ -479,9 +479,9 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           </Button>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="default" size="sm" className="gap-1.5" onClick={handleGeneratePlan} disabled={generatingPlan}>
-            {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
-            Generate Plan
+          <Button variant={planMode ? "secondary" : "default"} size="sm" className="gap-1.5" onClick={() => { if (planMode) { setPlanMode(false); } else { handleGeneratePlan(); } }} disabled={planLoading && !planMode}>
+            {planLoading && !planMode ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
+            {planMode ? "Back to Record" : "Plan My Day"}
           </Button>
           <Button variant={reminderOn ? "default" : "outline"} size="sm" className="gap-1.5" onClick={toggleReminder}>
             {reminderOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
