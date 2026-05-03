@@ -202,7 +202,8 @@ Please analyze my day and give me advice.`;
           model: "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
+            ...(generatePlan && conversationHistory && Array.isArray(conversationHistory) ? conversationHistory : []),
+            ...(userMessage ? [{ role: "user", content: userMessage }] : []),
           ],
           stream: true,
         }),
