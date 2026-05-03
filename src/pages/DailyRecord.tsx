@@ -160,6 +160,10 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     advisorScrollRef.current?.scrollTo({ top: advisorScrollRef.current.scrollHeight, behavior: "smooth" });
   }, [advisorMessages]);
 
+  useEffect(() => {
+    planScrollRef.current?.scrollTo({ top: planScrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [planMessages]);
+
   // Hourly beep reminder
   useEffect(() => {
     if (!reminderOn) return;
