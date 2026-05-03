@@ -572,131 +572,123 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           })}
         </div>
 
-        {/* AI Advisor Panel */}
+        {/* Right Panel: AI Advisor or Plan Conversation */}
         <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden flex flex-col h-[600px] lg:h-auto lg:max-h-[calc(100vh-200px)] sticky top-24">
-          <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
-            <div>
-              <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
-                <Bot className="h-4 w-4" /> AI Routine Advisor
-              </span>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Advice persists until you clear it</p>
-            </div>
-            {advisorMessages.length > 0 && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" title="Clear advice" onClick={() => setAdvisorMessages([])}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-          <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
-            {advisorMessages.length === 0 && !advisorLoading && (
-              <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
-                <Bot className="h-6 w-6 mx-auto text-primary/40" />
-                <p>Start logging activities and I'll analyze your routine, compare with scheduled tasks, and give personalized advice.</p>
-              </div>
-            )}
-            {advisorMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
-                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
-                }`}>
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {advisorLoading && advisorMessages[advisorMessages.length - 1]?.role !== "assistant" && (
-              <div className="flex justify-start">
-                <div className="bg-card rounded-lg px-3 py-2 border border-border">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="border-t border-primary/20 p-2 flex gap-2">
-            <Textarea
-              value={advisorInput}
-              onChange={(e) => setAdvisorInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskAdvisor(); } }}
-              placeholder="Ask about your routine..."
-              className="min-h-[36px] max-h-[80px] resize-none text-xs"
-              rows={1}
-            />
-            <Button size="icon" className="shrink-0 h-9 w-9" onClick={() => handleAskAdvisor()} disabled={advisorLoading || !advisorInput.trim()}>
-              {advisorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Plan Generation Dialog */}
-      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarPlus className="h-5 w-5" />
-              AI-Generated Daily Plan
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Generated DSL output */}
-            <div className="relative">
-              <Textarea
-                value={generatedDSL}
-                onChange={(e) => { setGeneratedDSL(e.target.value); setPlanParsed(false); setPlanPreview([]); }}
-                placeholder={generatingPlan ? "Generating your personalized plan..." : "DSL will appear here..."}
-                className="min-h-[200px] font-mono text-xs"
-                readOnly={generatingPlan}
-              />
-              {generatingPlan && (
-                <div className="absolute top-2 right-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                </div>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" onClick={handleParsePlan} disabled={generatingPlan || !generatedDSL.trim()}>
-                <FileText className="h-4 w-4 mr-1.5" />
-                Parse & Preview
-              </Button>
-              {planParsed && planPreview.length > 0 && (
-                <Button onClick={handleImportPlan}>
-                  <Check className="h-4 w-4 mr-1.5" />
-                  Import {planPreview.length} tasks
-                </Button>
-              )}
-              {planParsed && planPreview.length === 0 && (
-                <span className="text-sm text-destructive flex items-center gap-1">
-                  <X className="h-4 w-4" /> No valid tasks parsed — try regenerating
+          {planMode ? (
+            <>
+              <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                  <CalendarPlus className="h-4 w-4" /> AI Daily Planner
                 </span>
-              )}
-            </div>
-
-            {/* Preview */}
-            {planPreview.length > 0 && (
-              <div className="space-y-1 max-h-[300px] overflow-y-auto border rounded-lg p-3 bg-muted/30">
-                <p className="text-sm font-semibold mb-2">Preview ({planPreview.length} tasks):</p>
-                {planPreview.map((t) => (
-                  <div key={t.id} className="text-xs flex gap-2 items-center py-0.5">
-                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] shrink-0">{t.scope}</span>
-                    <span className="text-muted-foreground shrink-0">{t.category}</span>
-                    {t.startTime && <span className="text-muted-foreground shrink-0">{t.startTime}-{t.endTime}</span>}
-                    <span className="font-medium truncate">{t.title}</span>
-                    {t.timerDuration && <span className="text-muted-foreground shrink-0">({t.timerDuration}m)</span>}
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setPlanMode(false)}>
+                  ← Advisor
+                </Button>
+              </div>
+              <div ref={planScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+                {planMessages.length === 0 && !planLoading && (
+                  <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+                    <CalendarPlus className="h-6 w-6 mx-auto text-primary/40" />
+                    <p>Tell me how you're feeling, what's on your mind, and I'll build a balanced plan for your day.</p>
+                  </div>
+                )}
+                {planMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
+                      msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
+                    }`}>
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                          <ReactMarkdown>{msg.content.replace(/~~~dsl[\s\S]*?~~~/g, "")}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
                   </div>
                 ))}
+                {planLoading && planMessages[planMessages.length - 1]?.role !== "assistant" && (
+                  <div className="flex justify-start">
+                    <div className="bg-card rounded-lg px-3 py-2 border border-border">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+              <div className="border-t border-primary/20 p-2 flex gap-2">
+                <Textarea
+                  value={planInput}
+                  onChange={(e) => setPlanInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePlanChat(); } }}
+                  placeholder="Tell me how you're feeling, energy level, what tasks you have..."
+                  className="min-h-[36px] max-h-[80px] resize-none text-xs"
+                  rows={1}
+                />
+                <Button size="icon" className="shrink-0 h-9 w-9" onClick={() => handlePlanChat()} disabled={planLoading || !planInput.trim()}>
+                  {planLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                    <Bot className="h-4 w-4" /> AI Routine Advisor
+                  </span>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Advice persists until you clear it</p>
+                </div>
+                {advisorMessages.length > 0 && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Clear advice" onClick={() => setAdvisorMessages([])}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+              <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+                {advisorMessages.length === 0 && !advisorLoading && (
+                  <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+                    <Bot className="h-6 w-6 mx-auto text-primary/40" />
+                    <p>Start logging activities and I'll analyze your routine, compare with scheduled tasks, and give personalized advice.</p>
+                  </div>
+                )}
+                {advisorMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
+                      msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
+                    }`}>
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {advisorLoading && advisorMessages[advisorMessages.length - 1]?.role !== "assistant" && (
+                  <div className="flex justify-start">
+                    <div className="bg-card rounded-lg px-3 py-2 border border-border">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-primary/20 p-2 flex gap-2">
+                <Textarea
+                  value={advisorInput}
+                  onChange={(e) => setAdvisorInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskAdvisor(); } }}
+                  placeholder="Ask about your routine..."
+                  className="min-h-[36px] max-h-[80px] resize-none text-xs"
+                  rows={1}
+                />
+                <Button size="icon" className="shrink-0 h-9 w-9" onClick={() => handleAskAdvisor()} disabled={advisorLoading || !advisorInput.trim()}>
+                  {advisorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
     </div>
   );
 }
