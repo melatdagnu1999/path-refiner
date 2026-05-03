@@ -102,75 +102,67 @@ serve(async (req) => {
     let userMessage: string;
 
     if (generatePlan) {
-      // Plan generation mode
-      systemPrompt = PLAN_GENERATION_PROMPT;
+      // Conversational plan mode
+      systemPrompt = PLAN_CONVERSATION_PROMPT;
       systemPrompt += `\n\nToday's date: ${today}\nTimezone: ${tz}${prefBlock}`;
 
       // Build historical records context
-      let historyBlock = "";
       if (recordHistory && Array.isArray(recordHistory) && recordHistory.length > 0) {
-        historyBlock = "\n\nUSER'S RECENT DAILY RECORDS (study these to learn their routine):\n";
+        systemPrompt += "\n\nUSER'S RECENT DAILY RECORDS (study these to learn their routine):\n";
         for (const rec of recordHistory) {
-          historyBlock += `\n--- ${rec.date} ---\n`;
+          systemPrompt += `\n--- ${rec.date} ---\n`;
           for (const e of rec.entries) {
-            historyBlock += `  ${String(e.hour).padStart(2, "0")}:00 — ${e.activity} [${e.category}]\n`;
+            systemPrompt += `  ${String(e.hour).padStart(2, "0")}:00 — ${e.activity} [${e.category}]\n`;
           }
         }
       }
 
       // Build existing goal hierarchy context
-      let existingBlock = "";
       if (existingTasks && Array.isArray(existingTasks) && existingTasks.length > 0) {
-        // Group by scope for clear hierarchy display
         const yearly = existingTasks.filter((t: any) => t.scope === "year");
         const monthly = existingTasks.filter((t: any) => t.scope === "month");
         const weekly = existingTasks.filter((t: any) => t.scope === "week");
         const daily = existingTasks.filter((t: any) => t.scope === "day");
 
-        existingBlock = "\n\nUSER'S GOAL HIERARCHY (use WEEKLY_IDs to create daily tasks):\n";
-
+        systemPrompt += "\n\nUSER'S GOAL HIERARCHY (reference these when building the plan):\n";
         if (yearly.length) {
-          existingBlock += "\n--- YEARLY GOALS ---\n";
+          systemPrompt += "\n--- YEARLY GOALS ---\n";
           for (const t of yearly) {
-            const progress = t.progress ? ` (${t.progress}% done)` : "";
-            existingBlock += `  ID:${t.id} "${t.title}" [${t.category}]${progress} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  ID:${t.id} "${t.title}" [${t.category}] ${t.progress ? `(${t.progress}%)` : ""} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
         if (monthly.length) {
-          existingBlock += "\n--- MONTHLY GOALS (parentId → yearly) ---\n";
+          systemPrompt += "\n--- MONTHLY GOALS ---\n";
           for (const t of monthly) {
-            const progress = t.progress ? ` (${t.progress}% done)` : "";
-            existingBlock += `  ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}]${progress} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}] ${t.progress ? `(${t.progress}%)` : ""} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
         if (weekly.length) {
-          existingBlock += "\n--- WEEKLY GOALS (parentId → monthly) — USE THESE IDs as WEEKLY_ID ---\n";
+          systemPrompt += "\n--- WEEKLY GOALS (use these IDs as WEEKLY_ID in DSL) ---\n";
           for (const t of weekly) {
-            const progress = t.progress ? ` (${t.progress}% done)` : "";
             const dueDateStr = t.dueDate ? ` due:${t.dueDate}` : "";
-            existingBlock += `  WEEKLY_ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}]${progress}${dueDateStr} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  WEEKLY_ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}] ${t.progress ? `(${t.progress}%)` : ""}${dueDateStr} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
         if (daily.length) {
-          existingBlock += "\n--- ALREADY SCHEDULED DAILY TASKS (avoid duplicating) ---\n";
+          systemPrompt += "\n--- ALREADY SCHEDULED DAILY TASKS (avoid duplicating) ---\n";
           for (const t of daily) {
             const time = t.startTime ? ` ${t.startTime}-${t.endTime || "?"}` : "";
-            existingBlock += `  "${t.title}" [${t.category}]${time} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  "${t.title}" [${t.category}]${time} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
       }
 
-      userMessage = `Generate a complete daily plan for ${today}.${historyBlock}${existingBlock}
+      systemPrompt += `\n\nTODAY'S RECORD SO FAR:\n${entriesStr || "Nothing logged yet."}\n\nCURRENTLY SCHEDULED TASKS:\n${tasksStr || "No tasks scheduled."}`;
 
-TODAY'S RECORD SO FAR:
-${entriesStr || "Nothing logged yet."}
-
-CURRENTLY SCHEDULED TASKS:
-${tasksStr || "No tasks scheduled."}
-
-${message || "Create a balanced, productive daily plan that makes me disciplined and helps me achieve my goals. Consider my routine patterns and task progress."}
-
-OUTPUT ONLY THE DSL COMMANDS. Nothing else.`;
+      // For conversational mode, use the conversation history
+      if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+        // Already have conversation - just add latest message
+        userMessage = message || "";
+      } else {
+        // First message - AI should initiate by asking how they feel
+        userMessage = message || "I want to plan my day. Ask me how I'm feeling and what's on my mind, then help me build a balanced plan based on my goals.";
+      }
     } else {
       // Normal advisor mode
       systemPrompt = ADVISOR_PROMPT;
