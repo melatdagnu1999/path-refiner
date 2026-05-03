@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2, CalendarPlus, FileText, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Copy, Bell, BellOff, Bot, Loader2, Send, Trash2, CalendarPlus } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,17 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getPreferences } from "@/lib/preferences";
 import { getAIContext } from "@/lib/timezone";
 import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
-import { parseJournalDSL } from "@/components/JournalParser";
+
 import { importDSL } from "@/lib/JournalImporter";
 import { loadTasks } from "@/lib/taskStorage";
 
@@ -149,16 +143,20 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
   const advisorScrollRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Plan generation state
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [generatedDSL, setGeneratedDSL] = useState("");
-  const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [planPreview, setPlanPreview] = useState<Task[]>([]);
-  const [planParsed, setPlanParsed] = useState(false);
+  // Plan conversation state
+  const [planMode, setPlanMode] = useState(false);
+  const [planMessages, setPlanMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planInput, setPlanInput] = useState("");
+  const planScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     advisorScrollRef.current?.scrollTo({ top: advisorScrollRef.current.scrollHeight, behavior: "smooth" });
   }, [advisorMessages]);
+
+  useEffect(() => {
+    planScrollRef.current?.scrollTo({ top: planScrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [planMessages]);
 
   // Hourly beep reminder
   useEffect(() => {
@@ -355,18 +353,16 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     toast.success("DSL file downloaded!");
   };
 
-  // Generate daily plan via AI
+  // Start plan conversation
   const handleGeneratePlan = async () => {
-    setGeneratingPlan(true);
-    setGeneratedDSL("");
-    setPlanPreview([]);
-    setPlanParsed(false);
-    setPlanDialogOpen(true);
+    setPlanMode(true);
+    setPlanMessages([]);
+    setPlanLoading(true);
 
-    const recordHistory = loadRecordHistory(selectedDate, 14); // 2 weeks of history
+    const recordHistory = loadRecordHistory(selectedDate, 14);
     const allTasks = await loadTasks();
 
-    let dslSoFar = "";
+    let assistantSoFar = "";
     try {
       await streamFromAdvisor({
         entries: entries.filter((e) => e.activity.trim()),
@@ -382,40 +378,78 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         })),
         ...getAIContext(),
       }, (chunk) => {
-        dslSoFar += chunk;
-        setGeneratedDSL(dslSoFar);
+        assistantSoFar += chunk;
+        setPlanMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
       });
     } catch (e) {
       console.error(e);
-      toast.error("Failed to generate plan");
+      toast.error("Failed to start plan conversation");
     } finally {
-      setGeneratingPlan(false);
+      setPlanLoading(false);
     }
   };
 
-  const handleParsePlan = () => {
-    // Strip any markdown fencing the AI might have added
-    let cleanDSL = generatedDSL.trim();
-    cleanDSL = cleanDSL.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "");
-    const { tasks: parsed } = parseJournalDSL(cleanDSL);
-    setPlanPreview(parsed);
-    setPlanParsed(true);
-    if (parsed.length === 0) toast.warning("No valid tasks found in generated DSL");
-  };
+  // Continue plan conversation
+  const handlePlanChat = async (customMsg?: string) => {
+    const msg = customMsg || planInput.trim();
+    if (!msg) return;
+    setPlanLoading(true);
+    const updatedMessages = [...planMessages, { role: "user" as const, content: msg }];
+    setPlanMessages(updatedMessages);
+    setPlanInput("");
 
-  const handleImportPlan = async () => {
-    let cleanDSL = generatedDSL.trim();
-    cleanDSL = cleanDSL.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "");
+    const recordHistory = loadRecordHistory(selectedDate, 14);
+    const allTasks = await loadTasks();
+
+    let assistantSoFar = "";
     try {
-      const imported = await importDSL(cleanDSL);
-      toast.success(`Imported ${imported.length} tasks from generated plan`);
-      setPlanDialogOpen(false);
-      setGeneratedDSL("");
-      setPlanPreview([]);
-      setPlanParsed(false);
+      await streamFromAdvisor({
+        entries: entries.filter((e) => e.activity.trim()),
+        scheduledTasks: scheduledTasks.map((t) => ({
+          title: t.title, category: t.category, startTime: t.startTime, endTime: t.endTime, completed: t.completed, progress: t.progress,
+        })),
+        date: dateStr,
+        generatePlan: true,
+        conversationHistory: updatedMessages,
+        message: msg,
+        preferences: getPreferences(),
+        recordHistory,
+        existingTasks: allTasks.map((t) => ({
+          id: t.id, scope: t.scope, title: t.title, category: t.category, completed: t.completed, progress: t.progress, parentId: t.parentId, dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : undefined, startTime: t.startTime, endTime: t.endTime,
+        })),
+        ...getAIContext(),
+      }, (chunk) => {
+        assistantSoFar += chunk;
+        setPlanMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
+      });
+
+      // Check if the response contains DSL block — auto-import
+      const fullResponse = assistantSoFar;
+      const dslMatch = fullResponse.match(/~~~dsl\n([\s\S]*?)~~~/);
+      if (dslMatch) {
+        const dslContent = dslMatch[1].trim();
+        try {
+          const imported = await importDSL(dslContent);
+          if (imported.length > 0) {
+            toast.success(`✅ ${imported.length} tasks added to your schedule!`);
+          }
+        } catch (e) {
+          console.error("Auto-import failed:", e);
+        }
+      }
     } catch (e) {
       console.error(e);
-      toast.error("Failed to import plan");
+      toast.error("Failed to continue conversation");
+    } finally {
+      setPlanLoading(false);
     }
   };
 
@@ -439,9 +473,9 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           </Button>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="default" size="sm" className="gap-1.5" onClick={handleGeneratePlan} disabled={generatingPlan}>
-            {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
-            Generate Plan
+          <Button variant={planMode ? "secondary" : "default"} size="sm" className="gap-1.5" onClick={() => { if (planMode) { setPlanMode(false); } else { handleGeneratePlan(); } }} disabled={planLoading && !planMode}>
+            {planLoading && !planMode ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
+            {planMode ? "Back to Record" : "Plan My Day"}
           </Button>
           <Button variant={reminderOn ? "default" : "outline"} size="sm" className="gap-1.5" onClick={toggleReminder}>
             {reminderOn ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
@@ -532,131 +566,124 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           })}
         </div>
 
-        {/* AI Advisor Panel */}
+        {/* Right Panel: AI Advisor or Plan Conversation */}
         <div className="border border-primary/20 rounded-lg bg-primary/5 overflow-hidden flex flex-col h-[600px] lg:h-auto lg:max-h-[calc(100vh-200px)] sticky top-24">
-          <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
-            <div>
-              <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
-                <Bot className="h-4 w-4" /> AI Routine Advisor
-              </span>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Advice persists until you clear it</p>
-            </div>
-            {advisorMessages.length > 0 && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" title="Clear advice" onClick={() => setAdvisorMessages([])}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-          <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
-            {advisorMessages.length === 0 && !advisorLoading && (
-              <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
-                <Bot className="h-6 w-6 mx-auto text-primary/40" />
-                <p>Start logging activities and I'll analyze your routine, compare with scheduled tasks, and give personalized advice.</p>
-              </div>
-            )}
-            {advisorMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
-                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
-                }`}>
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {advisorLoading && advisorMessages[advisorMessages.length - 1]?.role !== "assistant" && (
-              <div className="flex justify-start">
-                <div className="bg-card rounded-lg px-3 py-2 border border-border">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="border-t border-primary/20 p-2 flex gap-2">
-            <Textarea
-              value={advisorInput}
-              onChange={(e) => setAdvisorInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskAdvisor(); } }}
-              placeholder="Ask about your routine..."
-              className="min-h-[36px] max-h-[80px] resize-none text-xs"
-              rows={1}
-            />
-            <Button size="icon" className="shrink-0 h-9 w-9" onClick={() => handleAskAdvisor()} disabled={advisorLoading || !advisorInput.trim()}>
-              {advisorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Plan Generation Dialog */}
-      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarPlus className="h-5 w-5" />
-              AI-Generated Daily Plan
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Generated DSL output */}
-            <div className="relative">
-              <Textarea
-                value={generatedDSL}
-                onChange={(e) => { setGeneratedDSL(e.target.value); setPlanParsed(false); setPlanPreview([]); }}
-                placeholder={generatingPlan ? "Generating your personalized plan..." : "DSL will appear here..."}
-                className="min-h-[200px] font-mono text-xs"
-                readOnly={generatingPlan}
-              />
-              {generatingPlan && (
-                <div className="absolute top-2 right-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                </div>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" onClick={handleParsePlan} disabled={generatingPlan || !generatedDSL.trim()}>
-                <FileText className="h-4 w-4 mr-1.5" />
-                Parse & Preview
-              </Button>
-              {planParsed && planPreview.length > 0 && (
-                <Button onClick={handleImportPlan}>
-                  <Check className="h-4 w-4 mr-1.5" />
-                  Import {planPreview.length} tasks
-                </Button>
-              )}
-              {planParsed && planPreview.length === 0 && (
-                <span className="text-sm text-destructive flex items-center gap-1">
-                  <X className="h-4 w-4" /> No valid tasks parsed — try regenerating
+          {planMode ? (
+            <>
+              <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                  <CalendarPlus className="h-4 w-4" /> AI Daily Planner
                 </span>
-              )}
-            </div>
-
-            {/* Preview */}
-            {planPreview.length > 0 && (
-              <div className="space-y-1 max-h-[300px] overflow-y-auto border rounded-lg p-3 bg-muted/30">
-                <p className="text-sm font-semibold mb-2">Preview ({planPreview.length} tasks):</p>
-                {planPreview.map((t) => (
-                  <div key={t.id} className="text-xs flex gap-2 items-center py-0.5">
-                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] shrink-0">{t.scope}</span>
-                    <span className="text-muted-foreground shrink-0">{t.category}</span>
-                    {t.startTime && <span className="text-muted-foreground shrink-0">{t.startTime}-{t.endTime}</span>}
-                    <span className="font-medium truncate">{t.title}</span>
-                    {t.timerDuration && <span className="text-muted-foreground shrink-0">({t.timerDuration}m)</span>}
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setPlanMode(false)}>
+                  ← Advisor
+                </Button>
+              </div>
+              <div ref={planScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+                {planMessages.length === 0 && !planLoading && (
+                  <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+                    <CalendarPlus className="h-6 w-6 mx-auto text-primary/40" />
+                    <p>Tell me how you're feeling, what's on your mind, and I'll build a balanced plan for your day.</p>
+                  </div>
+                )}
+                {planMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
+                      msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
+                    }`}>
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                          <ReactMarkdown>{msg.content.replace(/~~~dsl[\s\S]*?~~~/g, "")}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
                   </div>
                 ))}
+                {planLoading && planMessages[planMessages.length - 1]?.role !== "assistant" && (
+                  <div className="flex justify-start">
+                    <div className="bg-card rounded-lg px-3 py-2 border border-border">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+              <div className="border-t border-primary/20 p-2 flex gap-2">
+                <Textarea
+                  value={planInput}
+                  onChange={(e) => setPlanInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePlanChat(); } }}
+                  placeholder="Tell me how you're feeling, energy level, what tasks you have..."
+                  className="min-h-[36px] max-h-[80px] resize-none text-xs"
+                  rows={1}
+                />
+                <Button size="icon" className="shrink-0 h-9 w-9" onClick={() => handlePlanChat()} disabled={planLoading || !planInput.trim()}>
+                  {planLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                    <Bot className="h-4 w-4" /> AI Routine Advisor
+                  </span>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Advice persists until you clear it</p>
+                </div>
+                {advisorMessages.length > 0 && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Clear advice" onClick={() => setAdvisorMessages([])}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+              <div ref={advisorScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+                {advisorMessages.length === 0 && !advisorLoading && (
+                  <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+                    <Bot className="h-6 w-6 mx-auto text-primary/40" />
+                    <p>Start logging activities and I'll analyze your routine, compare with scheduled tasks, and give personalized advice.</p>
+                  </div>
+                )}
+                {advisorMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[95%] rounded-lg px-3 py-2 text-xs ${
+                      msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card text-foreground border border-border"
+                    }`}>
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {advisorLoading && advisorMessages[advisorMessages.length - 1]?.role !== "assistant" && (
+                  <div className="flex justify-start">
+                    <div className="bg-card rounded-lg px-3 py-2 border border-border">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-primary/20 p-2 flex gap-2">
+                <Textarea
+                  value={advisorInput}
+                  onChange={(e) => setAdvisorInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskAdvisor(); } }}
+                  placeholder="Ask about your routine..."
+                  className="min-h-[36px] max-h-[80px] resize-none text-xs"
+                  rows={1}
+                />
+                <Button size="icon" className="shrink-0 h-9 w-9" onClick={() => handleAskAdvisor()} disabled={advisorLoading || !advisorInput.trim()}>
+                  {advisorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

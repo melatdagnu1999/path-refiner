@@ -6,36 +6,49 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const PLAN_GENERATION_PROMPT = `You are an AI Daily Plan Generator. You schedule a productive day by creating daily tasks derived from the user's EXISTING yearly, monthly, and weekly goals.
+const PLAN_CONVERSATION_PROMPT = `You are a warm, insightful AI Life Planner having an open conversation with the user to build their daily (and upcoming days') plan.
+
+YOUR APPROACH:
+1. First, understand how the user is feeling — energy level, mood, what's on their mind, any deadlines pressing.
+2. Based on their response AND their existing goals/tasks, propose a balanced plan that is NEVER overwhelming.
+3. The plan should be realistic based on their energy. Low energy? Lighter day with essential tasks only. High energy? More ambitious but still balanced.
+4. Always consider ALL categories (work, study, fitness, spiritual, fun, relationships) for a whole-person balance.
+5. When you present the plan, show it as a clean, readable schedule — NOT raw DSL code.
+6. Ask for feedback. Let them adjust. Only finalize when they agree.
+
+WHEN THE USER CONFIRMS THE PLAN (says yes, looks good, confirm, etc.):
+- Output the FINAL plan as hidden DSL commands wrapped in a special block:
+  ~~~dsl
+  ADD_SUBTASK_DAILY 1 WEEKLY_ID <id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<title>"
+  ADD_SUBTASK_DAILY 2 WEEKLY_ID <id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<title>"
+  ~~~
+- Before the DSL block, write a brief encouraging confirmation message.
+- WEEKLY_ID must reference real IDs from the goal hierarchy. Use WEEKLY_ID 0 for routine/standalone tasks.
+- IDs start at 1 and increase sequentially.
+
+PLAN PRESENTATION FORMAT (before confirmation):
+Show the plan as a friendly readable schedule like:
+"Here's what I suggest for today:
+🌅 **Morning**
+- 6:00-6:30 — Morning prayer/meditation
+- 6:30-7:30 — Study Chapter 5 (your exam is in 3 days!)
+...
+🌤️ **Afternoon**
+- 12:00-13:00 — Lunch break
+...
+🌙 **Evening**
+- ...
+
+This gives you X hours of focused work, Y hours of self-care, and enough rest. What do you think?"
 
 CRITICAL RULES:
-1. You MUST output ONLY valid DSL commands. No markdown, no explanations, no extra text.
-2. The user already has yearly goals broken into monthly goals, then weekly goals. Your job is to generate ONLY daily tasks (ADD_SUBTASK_DAILY) that advance those existing weekly goals for the requested date.
-3. Reference the real WEEKLY_ID values provided in the goal hierarchy — do NOT invent new yearly/monthly/weekly goals.
-4. Study the user's daily record history to learn their routine patterns (when productive, when they procrastinate, energy levels).
-5. Consider task progress — focus more time on behind-schedule or incomplete goals.
-6. Balance across ALL categories the user has goals in.
-7. Schedule realistic time blocks — don't overload. Include breaks, meals, and transition time.
-8. If the user discussed specific plans in the conversation, honor those commitments.
-
-DSL FORMAT (output ONLY this command, one per line):
-
-ADD_SUBTASK_DAILY <id> WEEKLY_ID <weekly_id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<task_title>"
-
-RULES:
-- IDs start at 1 and increase sequentially.
-- Every daily task MUST reference a real WEEKLY_ID from the provided goal hierarchy.
-- Cover the FULL day from wake time to sleep time based on the user's observed routine.
-- Categories are inherited from the weekly goal's parent chain — do NOT add category to the command.
-- Make the plan for the specific date requested.
-- For routine tasks (meals, prayer, exercise) that don't map to a weekly goal, use the special WEEKLY_ID 0 to indicate a standalone routine task.
-
-LEARNING FROM RECORDS:
-- If the user is productive in mornings, schedule hard tasks there.
-- If they always skip a category, gently include it with a small block.
-- If they're behind on a goal, allocate more time.
-- If they tend to procrastinate at certain hours, schedule easier/fun tasks there.
-- Include consistent routines they already follow (exercise, prayer, meals).`;
+- NEVER show raw DSL to the user in conversation. Only output it in the ~~~dsl block after confirmation.
+- Be conversational, warm, ask questions.
+- Factor in their stated energy/mood — don't push someone who's exhausted.
+- Reference their ACTUAL goals by name. Show you know what they're working toward.
+- Plan for today primarily, but mention upcoming days if relevant deadlines exist.
+- Keep the plan balanced across categories — discipline WITHOUT burnout.
+- If they mention feeling overwhelmed, reduce the plan and focus on essentials only.`;
 
 const ADVISOR_PROMPT = `You are an AI daily routine advisor and accountability partner. You analyze what the user IS doing vs what they SHOULD be doing based on their scheduled tasks.
 
@@ -55,7 +68,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
-    const { entries, scheduledTasks, date, message, preferences, timezone, todayLocal, generatePlan, existingTasks, recordHistory } = await req.json();
+    const { entries, scheduledTasks, date, message, preferences, timezone, todayLocal, generatePlan, existingTasks, recordHistory, conversationHistory } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -89,75 +102,67 @@ serve(async (req) => {
     let userMessage: string;
 
     if (generatePlan) {
-      // Plan generation mode
-      systemPrompt = PLAN_GENERATION_PROMPT;
+      // Conversational plan mode
+      systemPrompt = PLAN_CONVERSATION_PROMPT;
       systemPrompt += `\n\nToday's date: ${today}\nTimezone: ${tz}${prefBlock}`;
 
       // Build historical records context
-      let historyBlock = "";
       if (recordHistory && Array.isArray(recordHistory) && recordHistory.length > 0) {
-        historyBlock = "\n\nUSER'S RECENT DAILY RECORDS (study these to learn their routine):\n";
+        systemPrompt += "\n\nUSER'S RECENT DAILY RECORDS (study these to learn their routine):\n";
         for (const rec of recordHistory) {
-          historyBlock += `\n--- ${rec.date} ---\n`;
+          systemPrompt += `\n--- ${rec.date} ---\n`;
           for (const e of rec.entries) {
-            historyBlock += `  ${String(e.hour).padStart(2, "0")}:00 — ${e.activity} [${e.category}]\n`;
+            systemPrompt += `  ${String(e.hour).padStart(2, "0")}:00 — ${e.activity} [${e.category}]\n`;
           }
         }
       }
 
       // Build existing goal hierarchy context
-      let existingBlock = "";
       if (existingTasks && Array.isArray(existingTasks) && existingTasks.length > 0) {
-        // Group by scope for clear hierarchy display
         const yearly = existingTasks.filter((t: any) => t.scope === "year");
         const monthly = existingTasks.filter((t: any) => t.scope === "month");
         const weekly = existingTasks.filter((t: any) => t.scope === "week");
         const daily = existingTasks.filter((t: any) => t.scope === "day");
 
-        existingBlock = "\n\nUSER'S GOAL HIERARCHY (use WEEKLY_IDs to create daily tasks):\n";
-
+        systemPrompt += "\n\nUSER'S GOAL HIERARCHY (reference these when building the plan):\n";
         if (yearly.length) {
-          existingBlock += "\n--- YEARLY GOALS ---\n";
+          systemPrompt += "\n--- YEARLY GOALS ---\n";
           for (const t of yearly) {
-            const progress = t.progress ? ` (${t.progress}% done)` : "";
-            existingBlock += `  ID:${t.id} "${t.title}" [${t.category}]${progress} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  ID:${t.id} "${t.title}" [${t.category}] ${t.progress ? `(${t.progress}%)` : ""} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
         if (monthly.length) {
-          existingBlock += "\n--- MONTHLY GOALS (parentId → yearly) ---\n";
+          systemPrompt += "\n--- MONTHLY GOALS ---\n";
           for (const t of monthly) {
-            const progress = t.progress ? ` (${t.progress}% done)` : "";
-            existingBlock += `  ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}]${progress} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}] ${t.progress ? `(${t.progress}%)` : ""} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
         if (weekly.length) {
-          existingBlock += "\n--- WEEKLY GOALS (parentId → monthly) — USE THESE IDs as WEEKLY_ID ---\n";
+          systemPrompt += "\n--- WEEKLY GOALS (use these IDs as WEEKLY_ID in DSL) ---\n";
           for (const t of weekly) {
-            const progress = t.progress ? ` (${t.progress}% done)` : "";
             const dueDateStr = t.dueDate ? ` due:${t.dueDate}` : "";
-            existingBlock += `  WEEKLY_ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}]${progress}${dueDateStr} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  WEEKLY_ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}] ${t.progress ? `(${t.progress}%)` : ""}${dueDateStr} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
         if (daily.length) {
-          existingBlock += "\n--- ALREADY SCHEDULED DAILY TASKS (avoid duplicating) ---\n";
+          systemPrompt += "\n--- ALREADY SCHEDULED DAILY TASKS (avoid duplicating) ---\n";
           for (const t of daily) {
             const time = t.startTime ? ` ${t.startTime}-${t.endTime || "?"}` : "";
-            existingBlock += `  "${t.title}" [${t.category}]${time} ${t.completed ? "✅" : "⬜"}\n`;
+            systemPrompt += `  "${t.title}" [${t.category}]${time} ${t.completed ? "✅" : "⬜"}\n`;
           }
         }
       }
 
-      userMessage = `Generate a complete daily plan for ${today}.${historyBlock}${existingBlock}
+      systemPrompt += `\n\nTODAY'S RECORD SO FAR:\n${entriesStr || "Nothing logged yet."}\n\nCURRENTLY SCHEDULED TASKS:\n${tasksStr || "No tasks scheduled."}`;
 
-TODAY'S RECORD SO FAR:
-${entriesStr || "Nothing logged yet."}
-
-CURRENTLY SCHEDULED TASKS:
-${tasksStr || "No tasks scheduled."}
-
-${message || "Create a balanced, productive daily plan that makes me disciplined and helps me achieve my goals. Consider my routine patterns and task progress."}
-
-OUTPUT ONLY THE DSL COMMANDS. Nothing else.`;
+      // For conversational mode, use the conversation history
+      if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+        // Already have conversation - just add latest message
+        userMessage = message || "";
+      } else {
+        // First message - AI should initiate by asking how they feel
+        userMessage = message || "I want to plan my day. Ask me how I'm feeling and what's on my mind, then help me build a balanced plan based on my goals.";
+      }
     } else {
       // Normal advisor mode
       systemPrompt = ADVISOR_PROMPT;
@@ -197,7 +202,8 @@ Please analyze my day and give me advice.`;
           model: "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
+            ...(generatePlan && conversationHistory && Array.isArray(conversationHistory) ? conversationHistory : []),
+            ...(userMessage ? [{ role: "user", content: userMessage }] : []),
           ],
           stream: true,
         }),
