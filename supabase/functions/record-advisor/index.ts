@@ -6,38 +6,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const PLAN_GENERATION_PROMPT = `You are an AI Daily Plan Generator. You create structured, balanced daily schedules using a strict DSL format.
+const PLAN_GENERATION_PROMPT = `You are an AI Daily Plan Generator. You schedule a productive day by creating daily tasks derived from the user's EXISTING yearly, monthly, and weekly goals.
 
 CRITICAL RULES:
 1. You MUST output ONLY valid DSL commands. No markdown, no explanations, no extra text.
-2. Study the user's daily record history to learn their routine patterns (when productive, when they procrastinate, energy levels).
-3. Consider task progress — focus more time on behind-schedule tasks.
-4. Balance across ALL categories the user has goals in (work, class, career, fun, church, self-care, skill, relationship, personal).
-5. Make the user disciplined, productive, and an achiever while maintaining work-life balance.
-6. Schedule realistic time blocks — don't overload. Include breaks, meals, and transition time.
-7. Consider what the user actually does vs what they should do based on their records.
+2. The user already has yearly goals broken into monthly goals, then weekly goals. Your job is to generate ONLY daily tasks (ADD_SUBTASK_DAILY) that advance those existing weekly goals for the requested date.
+3. Reference the real WEEKLY_ID values provided in the goal hierarchy — do NOT invent new yearly/monthly/weekly goals.
+4. Study the user's daily record history to learn their routine patterns (when productive, when they procrastinate, energy levels).
+5. Consider task progress — focus more time on behind-schedule or incomplete goals.
+6. Balance across ALL categories the user has goals in.
+7. Schedule realistic time blocks — don't overload. Include breaks, meals, and transition time.
+8. If the user discussed specific plans in the conversation, honor those commitments.
 
-DSL FORMAT (output ONLY these commands, in this exact order):
+DSL FORMAT (output ONLY this command, one per line):
 
-ADD_CORE "<title>" CATEGORY "<category>" DEADLINE "<YYYY-MM-DD>"
-ADD_MONTHLY <id> TITLE "<title>" MONTH "<YYYY-MM>" YEARLY_ID <core_id> INDEX <index>
-ADD_WEEKLY <id> TITLE "<title>" WEEK "<YYYY-MM-DD>" MONTHLY_ID <monthly_id> INDEX <index>
 ADD_SUBTASK_DAILY <id> WEEKLY_ID <weekly_id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<task_title>"
 
 RULES:
-- IDs start at 1 and increase sequentially without gaps or repeats.
-- Every monthly references a valid YEARLY_ID.
-- Every weekly references a valid MONTHLY_ID.
-- Every daily references a valid WEEKLY_ID.
-- Output order: all ADD_CORE → all ADD_MONTHLY → all ADD_WEEKLY → all ADD_SUBTASK_DAILY.
-- Categories: class, work, career, fun, church, self-care, skill, relationship, personal
+- IDs start at 1 and increase sequentially.
+- Every daily task MUST reference a real WEEKLY_ID from the provided goal hierarchy.
 - Cover the FULL day from wake time to sleep time based on the user's observed routine.
-- If the user has existing yearly/monthly/weekly goals, reference and build upon them.
+- Categories are inherited from the weekly goal's parent chain — do NOT add category to the command.
 - Make the plan for the specific date requested.
+- For routine tasks (meals, prayer, exercise) that don't map to a weekly goal, use the special WEEKLY_ID 0 to indicate a standalone routine task.
 
 LEARNING FROM RECORDS:
 - If the user is productive in mornings, schedule hard tasks there.
-- If they always skip a category, gently include it.
+- If they always skip a category, gently include it with a small block.
 - If they're behind on a goal, allocate more time.
 - If they tend to procrastinate at certain hours, schedule easier/fun tasks there.
 - Include consistent routines they already follow (exercise, prayer, meals).`;
