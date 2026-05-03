@@ -105,13 +105,45 @@ serve(async (req) => {
         }
       }
 
-      // Build existing tasks context
+      // Build existing goal hierarchy context
       let existingBlock = "";
       if (existingTasks && Array.isArray(existingTasks) && existingTasks.length > 0) {
-        existingBlock = "\n\nUSER'S EXISTING GOALS & TASKS (build upon these):\n";
-        for (const t of existingTasks) {
-          const progress = t.progress ? ` (${t.progress}% done)` : "";
-          existingBlock += `  [${t.scope}] ${t.title} — ${t.category}${progress} ${t.completed ? "✅" : "⬜"}\n`;
+        // Group by scope for clear hierarchy display
+        const yearly = existingTasks.filter((t: any) => t.scope === "year");
+        const monthly = existingTasks.filter((t: any) => t.scope === "month");
+        const weekly = existingTasks.filter((t: any) => t.scope === "week");
+        const daily = existingTasks.filter((t: any) => t.scope === "day");
+
+        existingBlock = "\n\nUSER'S GOAL HIERARCHY (use WEEKLY_IDs to create daily tasks):\n";
+
+        if (yearly.length) {
+          existingBlock += "\n--- YEARLY GOALS ---\n";
+          for (const t of yearly) {
+            const progress = t.progress ? ` (${t.progress}% done)` : "";
+            existingBlock += `  ID:${t.id} "${t.title}" [${t.category}]${progress} ${t.completed ? "✅" : "⬜"}\n`;
+          }
+        }
+        if (monthly.length) {
+          existingBlock += "\n--- MONTHLY GOALS (parentId → yearly) ---\n";
+          for (const t of monthly) {
+            const progress = t.progress ? ` (${t.progress}% done)` : "";
+            existingBlock += `  ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}]${progress} ${t.completed ? "✅" : "⬜"}\n`;
+          }
+        }
+        if (weekly.length) {
+          existingBlock += "\n--- WEEKLY GOALS (parentId → monthly) — USE THESE IDs as WEEKLY_ID ---\n";
+          for (const t of weekly) {
+            const progress = t.progress ? ` (${t.progress}% done)` : "";
+            const dueDateStr = t.dueDate ? ` due:${t.dueDate}` : "";
+            existingBlock += `  WEEKLY_ID:${t.id} parentId:${t.parentId || "none"} "${t.title}" [${t.category}]${progress}${dueDateStr} ${t.completed ? "✅" : "⬜"}\n`;
+          }
+        }
+        if (daily.length) {
+          existingBlock += "\n--- ALREADY SCHEDULED DAILY TASKS (avoid duplicating) ---\n";
+          for (const t of daily) {
+            const time = t.startTime ? ` ${t.startTime}-${t.endTime || "?"}` : "";
+            existingBlock += `  "${t.title}" [${t.category}]${time} ${t.completed ? "✅" : "⬜"}\n`;
+          }
         }
       }
 
