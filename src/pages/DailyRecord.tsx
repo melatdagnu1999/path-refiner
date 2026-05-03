@@ -689,6 +689,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
             </>
           )}
         </div>
+      </div>
     </div>
   );
 }
