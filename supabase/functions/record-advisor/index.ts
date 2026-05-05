@@ -19,11 +19,13 @@ YOUR APPROACH:
 WHEN THE USER CONFIRMS THE PLAN (says yes, looks good, confirm, etc.):
 - Output the FINAL plan as hidden DSL commands wrapped in a special block:
   ~~~dsl
-  ADD_SUBTASK_DAILY 1 WEEKLY_ID <id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<title>"
-  ADD_SUBTASK_DAILY 2 WEEKLY_ID <id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<title>"
+  ADD_SUBTASK_DAILY 1 WEEKLY_ID <id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<title>" CATEGORY "<category>"
+  ADD_SUBTASK_DAILY 2 WEEKLY_ID <id> DATE "<YYYY-MM-DD>" TIME "HH:MM-HH:MM" TITLE "<title>" CATEGORY "<category>"
   ~~~
 - Before the DSL block, write a brief encouraging confirmation message.
-- WEEKLY_ID must reference real IDs from the goal hierarchy. Use WEEKLY_ID 0 for routine/standalone tasks.
+- WEEKLY_ID must use the ACTUAL task ID from the goal hierarchy (e.g. WEEKLY_ID dsl_abc123). These are shown as "WEEKLY_ID:<actual_id>" in the hierarchy below.
+- Use WEEKLY_ID 0 for routine/standalone tasks that don't belong to any goal.
+- Always include CATEGORY for every task line — valid categories: class, work, career, fun, church, self-care, skill, relationship, personal.
 - IDs start at 1 and increase sequentially.
 
 PLAN PRESENTATION FORMAT (before confirmation):
