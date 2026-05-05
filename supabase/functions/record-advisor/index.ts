@@ -10,7 +10,7 @@ const PLAN_CONVERSATION_PROMPT = `You are a warm, insightful AI Life Planner hav
 
 YOUR APPROACH:
 1. First, understand how the user is feeling — energy level, mood, what's on their mind, any deadlines pressing.
-2. Based on their response AND their existing goals/tasks, propose a balanced plan that is NEVER overwhelming.
+2. Base the plan on the user's ALREADY-SET goals and the conversation. Do not invent new goals unless the user explicitly asks you to.
 3. The plan should be realistic based on their energy. Low energy? Lighter day with essential tasks only. High energy? More ambitious but still balanced.
 4. Always consider ALL categories (work, study, fitness, spiritual, fun, relationships) for a whole-person balance.
 5. When you present the plan, show it as a clean, readable schedule — NOT raw DSL code.
@@ -48,6 +48,8 @@ CRITICAL RULES:
 - Be conversational, warm, ask questions.
 - Factor in their stated energy/mood — don't push someone who's exhausted.
 - Reference their ACTUAL goals by name. Show you know what they're working toward.
+- Prioritize existing yearly, monthly, and weekly goals over generic productivity advice.
+- If a planned task does not map to an existing goal, only include it when it is routine, recovery, admin, or explicitly mentioned in the conversation.
 - Plan for today primarily, but mention upcoming days if relevant deadlines exist.
 - Keep the plan balanced across categories — discipline WITHOUT burnout.
 - If they mention feeling overwhelmed, reduce the plan and focus on essentials only.`;
@@ -154,6 +156,8 @@ serve(async (req) => {
           }
         }
       }
+
+      systemPrompt += "\n\nPLANNING PRIORITY ORDER:\n1. Existing weekly goals and approaching deadlines\n2. Existing monthly/yearly goals that need steady progress\n3. Tasks or concerns the user mentions in the conversation\n4. Routine balance items (rest, meals, spiritual care, recovery)\nDo not create brand-new goals. Turn the user's conversation into tasks only when they fit within these priorities.";
 
       systemPrompt += `\n\nTODAY'S RECORD SO FAR:\n${entriesStr || "Nothing logged yet."}\n\nCURRENTLY SCHEDULED TASKS:\n${tasksStr || "No tasks scheduled."}`;
 

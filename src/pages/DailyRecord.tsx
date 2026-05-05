@@ -19,7 +19,6 @@ import { getAIContext } from "@/lib/timezone";
 import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
 
 import { importDSL } from "@/lib/JournalImporter";
-import { loadTasks } from "@/lib/taskStorage";
 
 function playBeep() {
   try {
@@ -58,6 +57,7 @@ interface DailyRecordProps {
   selectedDate: Date;
   onSetDate: (d: Date) => void;
   tasks?: Task[];
+  onImportTasks?: (tasks: Task[]) => void | Promise<void>;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -131,7 +131,7 @@ function exportToDSL(date: Date, entries: HourEntry[]): string {
   return lines.join("\n");
 }
 
-export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: DailyRecordProps) {
+export default function DailyRecord({ selectedDate, onSetDate, tasks = [], onImportTasks }: DailyRecordProps) {
   const [entries, setEntries] = useState<HourEntry[]>(() => loadEntries(selectedDate));
   const [reminderOn, setReminderOn] = useState(() => localStorage.getItem("record_reminder") !== "off");
   const lastBeepHourRef = useRef<number>(-1);
@@ -353,6 +353,14 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     toast.success("DSL file downloaded!");
   };
 
+  const importPlanTasks = async (dslText: string) => {
+    const imported = await importDSL(dslText);
+    if (imported.length > 0) {
+      await onImportTasks?.(imported);
+    }
+    return imported;
+  };
+
   // Start plan conversation
   const handleGeneratePlan = async () => {
     setPlanMode(true);
@@ -360,7 +368,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     setPlanLoading(true);
 
     const recordHistory = loadRecordHistory(selectedDate, 14);
-    const allTasks = await loadTasks();
+    const allTasks = tasks;
 
     let assistantSoFar = "";
     try {
@@ -392,7 +400,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         const cleanedResponse = assistantSoFar.replace(/~~~dsl\n[\s\S]*?~~~/g, "").trim();
         setPlanMessages((prev) => prev.map((m, i) => (i === prev.length - 1 && m.role === "assistant" ? { ...m, content: cleanedResponse } : m)));
         try {
-          const imported = await importDSL(dslMatch[1].trim());
+          const imported = await importPlanTasks(dslMatch[1].trim());
           if (imported.length > 0) toast.success(`✅ ${imported.length} tasks added to your schedule!`);
         } catch (e) { console.error("Auto-import failed:", e); }
       }
@@ -414,7 +422,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
     setPlanInput("");
 
     const recordHistory = loadRecordHistory(selectedDate, 14);
-    const allTasks = await loadTasks();
+    const allTasks = tasks;
 
     let assistantSoFar = "";
     try {
@@ -451,7 +459,7 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
         const cleanedResponse = fullResponse.replace(/~~~dsl\n[\s\S]*?~~~/g, "").trim();
         setPlanMessages((prev) => prev.map((m, i) => (i === prev.length - 1 && m.role === "assistant" ? { ...m, content: cleanedResponse } : m)));
         try {
-          const imported = await importDSL(dslContent);
+          const imported = await importPlanTasks(dslContent);
           if (imported.length > 0) {
             toast.success(`✅ ${imported.length} tasks added to your schedule!`);
           } else {

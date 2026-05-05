@@ -286,6 +286,7 @@ const Index = () => {
             selectedDate={selectedDate}
             onSetDate={setSelectedDate}
             tasks={tasks}
+            onImportTasks={handleImportTasks}
           />
         )}
 
