@@ -19,7 +19,6 @@ import { getAIContext } from "@/lib/timezone";
 import { onTaskReminderForAdvisor } from "@/hooks/useTaskNotifications";
 
 import { importDSL } from "@/lib/JournalImporter";
-import { loadTasks } from "@/lib/taskStorage";
 
 function playBeep() {
   try {
@@ -58,6 +57,7 @@ interface DailyRecordProps {
   selectedDate: Date;
   onSetDate: (d: Date) => void;
   tasks?: Task[];
+  onImportTasks?: (tasks: Task[]) => void | Promise<void>;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -131,7 +131,7 @@ function exportToDSL(date: Date, entries: HourEntry[]): string {
   return lines.join("\n");
 }
 
-export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: DailyRecordProps) {
+export default function DailyRecord({ selectedDate, onSetDate, tasks = [], onImportTasks }: DailyRecordProps) {
   const [entries, setEntries] = useState<HourEntry[]>(() => loadEntries(selectedDate));
   const [reminderOn, setReminderOn] = useState(() => localStorage.getItem("record_reminder") !== "off");
   const lastBeepHourRef = useRef<number>(-1);
