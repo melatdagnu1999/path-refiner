@@ -385,6 +385,17 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
           return [...prev, { role: "assistant", content: assistantSoFar }];
         });
       });
+
+      // Auto-import if DSL block present in initial response
+      const dslMatch = assistantSoFar.match(/~~~dsl\n([\s\S]*?)~~~/);
+      if (dslMatch) {
+        const cleanedResponse = assistantSoFar.replace(/~~~dsl\n[\s\S]*?~~~/g, "").trim();
+        setPlanMessages((prev) => prev.map((m, i) => (i === prev.length - 1 && m.role === "assistant" ? { ...m, content: cleanedResponse } : m)));
+        try {
+          const imported = await importDSL(dslMatch[1].trim());
+          if (imported.length > 0) toast.success(`✅ ${imported.length} tasks added to your schedule!`);
+        } catch (e) { console.error("Auto-import failed:", e); }
+      }
     } catch (e) {
       console.error(e);
       toast.error("Failed to start plan conversation");
@@ -436,13 +447,19 @@ export default function DailyRecord({ selectedDate, onSetDate, tasks = [] }: Dai
       const dslMatch = fullResponse.match(/~~~dsl\n([\s\S]*?)~~~/);
       if (dslMatch) {
         const dslContent = dslMatch[1].trim();
+        // Remove DSL block from displayed message so user doesn't see raw code
+        const cleanedResponse = fullResponse.replace(/~~~dsl\n[\s\S]*?~~~/g, "").trim();
+        setPlanMessages((prev) => prev.map((m, i) => (i === prev.length - 1 && m.role === "assistant" ? { ...m, content: cleanedResponse } : m)));
         try {
           const imported = await importDSL(dslContent);
           if (imported.length > 0) {
             toast.success(`✅ ${imported.length} tasks added to your schedule!`);
+          } else {
+            toast.warning("Plan generated but no tasks could be parsed. Trying alternative import...");
           }
         } catch (e) {
           console.error("Auto-import failed:", e);
+          toast.error("Failed to import plan tasks");
         }
       }
     } catch (e) {
