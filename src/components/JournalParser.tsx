@@ -169,26 +169,47 @@ export function parseJournalDSL(input: string): { tasks: Task[]; progress: Progr
 
     // ===== NEW FORMAT: ADD_SUBTASK_DAILY with WEEKLY_ID, DATE, TIME, TITLE =====
     if (line.startsWith("ADD_SUBTASK_DAILY")) {
-      // Try new format first: ADD_SUBTASK_DAILY 1 WEEKLY_ID 1 DATE "2026-03-06" TIME "08:00-10:00" TITLE "Thesis Deep Work"
+      // Format: ADD_SUBTASK_DAILY 1 WEEKLY_ID <ref> DATE "2026-03-06" TIME "08:00-10:00" TITLE "Thesis Deep Work"
+      // WEEKLY_ID can be: a sequential index (from ADD_WEEKLY), a real task ID (e.g. dsl_abc123), or 0 for standalone
       const newMatch = line.match(
-        /ADD_SUBTASK_DAILY\s+\d+\s+WEEKLY_ID\s+(\d+)\s+DATE\s+"([^"]+)"\s+TIME\s+"(\d{2}:\d{2})-(\d{2}:\d{2})"\s+TITLE\s+"([^"]+)"/
+        /ADD_SUBTASK_DAILY\s+\d+\s+WEEKLY_ID\s+(\S+)\s+DATE\s+"([^"]+)"\s+TIME\s+"(\d{2}:\d{2})-(\d{2}:\d{2})"\s+TITLE\s+"([^"]+)"/
       );
 
-      if (newMatch) {
-        const [, weeklyRef, dateStr, startTime, endTime, title] = newMatch;
-        const parentWeeklyId = weeklyMap[weeklyRef];
-        if (!parentWeeklyId) continue;
+      // Also support format without TIME (just DATE and TITLE)
+      const noTimeMatch = !newMatch ? line.match(
+        /ADD_SUBTASK_DAILY\s+\d+\s+WEEKLY_ID\s+(\S+)\s+DATE\s+"([^"]+)"\s+TITLE\s+"([^"]+)"/
+      ) : null;
+
+      const matched = newMatch || noTimeMatch;
+      if (matched) {
+        const weeklyRef = matched[1];
+        const dateStr = matched[2];
+        const startTime = newMatch ? newMatch[3] : undefined;
+        const endTime = newMatch ? newMatch[4] : undefined;
+        const title = newMatch ? newMatch[5] : (noTimeMatch ? noTimeMatch[3] : "Task");
+
+        // Resolve parent: try sequential map first, then treat as direct task ID, 0 = standalone
+        let parentWeeklyId: string | undefined;
+        if (weeklyRef === "0") {
+          parentWeeklyId = undefined; // standalone/routine task
+        } else if (weeklyMap[weeklyRef]) {
+          parentWeeklyId = weeklyMap[weeklyRef];
+        } else {
+          // Treat as a real task ID from the database
+          parentWeeklyId = weeklyRef;
+        }
 
         const date = safeDate(dateStr);
         if (!date) continue;
 
-        const parentWeekly = taskById[parentWeeklyId];
-        const duration = computeDuration(startTime, endTime);
+        const parentWeekly = parentWeeklyId ? taskById[parentWeeklyId] : undefined;
+        const duration = startTime && endTime ? computeDuration(startTime, endTime) : undefined;
+        const categoryMatch = line.match(/CATEGORY\s+"([^"]+)"/)?.[1];
 
         registerTask({
-          id: deterministicId(`day::${title}::${dateStr}::${startTime}-${endTime}`),
+          id: deterministicId(`day::${title}::${dateStr}::${startTime ?? ''}-${endTime ?? ''}`),
           title,
-          category: parentWeekly?.category ?? detectCategory(title),
+          category: categoryMatch ? (categoryMatch as Category) : (parentWeekly?.category ?? detectCategory(title)),
           priority: "medium",
           completed: false,
           scope: "day",
