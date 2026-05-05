@@ -71,6 +71,10 @@ function writeJsonTasks(tasks: Task[]): void {
 export async function loadTasks(): Promise<Task[]> {
   const jsonBackup = readJsonTasks(TASKS_JSON_KEY);
 
+   if (jsonBackup) {
+    return jsonBackup;
+  }
+
   try {
     const db = await getDB();
     const result = db.exec("SELECT * FROM tasks");
